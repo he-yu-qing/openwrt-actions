@@ -36,7 +36,7 @@ env:
   REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-24.10
   REPO_BRANCH: 2410
   FEEDS_CONF: jdc-ax6000/feeds.conf.default
-  CONFIG_FILE: mt7981-ax3000.config
+  CONFIG_FILE: Rax3000emcc.config
   DIY_P1_SH: jdc-ax6000/diy-part1.sh
   DIY_P2_SH: jdc-ax6000/diy-part2.sh
   SSH_ACTIONS: false
