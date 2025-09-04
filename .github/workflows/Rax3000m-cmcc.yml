@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 ###############手动修改##############
-name: MT7981-AX3000
+name: Rax3000m-cmcc
 
 on:
   repository_dispatch:
