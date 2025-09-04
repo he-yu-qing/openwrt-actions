@@ -17,7 +17,7 @@ on:
       LAN_IP:
         description: 'Set LAN IP Address'
         required: true
-        default: '192.168.8.1'
+        default: '192.168.10.1'
       NO_DOCKERMAN:
         description: 'Not build luci-app-dockerman'
         required: true
@@ -36,7 +36,7 @@ env:
   REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-24.10
   REPO_BRANCH: 2410
   FEEDS_CONF: jdc-ax6000/feeds.conf.default
-  CONFIG_FILE: Rax3000emcc.config
+  CONFIG_FILE: rax3000m.config
   DIY_P1_SH: jdc-ax6000/diy-part1.sh
   DIY_P2_SH: jdc-ax6000/diy-part2.sh
   SSH_ACTIONS: false
