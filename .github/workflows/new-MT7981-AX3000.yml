@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 ###############手动修改##############
-name: rax3000m-cmmc
+name: new-MT7981-AX3000
 
 on:
   repository_dispatch:
@@ -17,7 +17,7 @@ on:
       LAN_IP:
         description: 'Set LAN IP Address'
         required: true
-        default: '192.168.10.1'
+        default: '192.168.8.1'
       NO_DOCKERMAN:
         description: 'Not build luci-app-dockerman'
         required: true
@@ -32,9 +32,9 @@ on:
 
 env:
   ###############手动修改##############
-  OPENWRT_NAME: rax3000m-6.6
-  REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-6.6
-  REPO_BRANCH: openwrt-24.10-6.6
+  OPENWRT_NAME: new-MT7981-AX3000
+  REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-24.10
+  REPO_BRANCH: 2410
   FEEDS_CONF: jdc-ax6000/feeds.conf.default
   CONFIG_FILE: rax3000m.config
   DIY_P1_SH: jdc-ax6000/diy-part1.sh
@@ -67,7 +67,6 @@ jobs:
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
-
     - name: 清理磁盘空间(Ubuntu)
       uses: jlumbroso/free-disk-space@main
       with:
@@ -89,27 +88,23 @@ jobs:
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-
     - name: 加载feeds.conf.default & DIY_P1_SH
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
         chmod +x $DIY_P1_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
-
     - name: 更新 & 安装 feeds
       run: |
         cd openwrt
         ./scripts/feeds update -a
         ./scripts/feeds install -a
-
     - name: 加载config & DIY_P2_SH
       run: |
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
-
     - name: 设置LAN IP地址（路由器登录地址）
       run: |
         cd openwrt
@@ -123,13 +118,11 @@ jobs:
         else
             echo "Invalid IP address, use default."
         fi
-
     - name: 取消编译dockerman
       if: github.event.inputs.NO_DOCKERMAN == 'true'
       run: |
         cd openwrt
         sed -i '/CONFIG_PACKAGE_luci-app-dockerman=y/d' .config
-
     - name: SSH链接管理
       uses: P3TERX/ssh2actions@v1.0.0
       if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
@@ -145,7 +138,6 @@ jobs:
         make download -j$(nproc)
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
-
     - name: 编译固件
       id: compile
       run: |
@@ -165,7 +157,6 @@ jobs:
         fi
         echo "FILE_DATE=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
-
     - name: 查看磁盘使用情况
       if: (!cancelled())
       run: df -hT
@@ -181,7 +172,6 @@ jobs:
         rename 's/.*${{ env.DEVICE_NAME }}/${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}/' *
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
-
     - name: 打包上传固件到Actions Artifacts
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
@@ -194,13 +184,13 @@ jobs:
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
         touch release.txt
-        echo "- 适配机型：rax3000m" >> release.txt
+        echo "- 固件适配机型：MT7981-AX3000" >> release.txt
         echo "- 使用源码：${{ env.REPO_URL }}" >> release.txt
-        echo "- 使用分支：openwrt-24.10-6.6" >> release.txt
-        echo "- 内核版本：6.6.95" >> release.txt
+        echo "- 使用分支：Openwrt 24.10" >> release.txt
+        echo "- 内核版本：5.4.284" >> release.txt
         echo "- 登录地址：${{ env.IP_ADDR }}" >> release.txt
         echo "- 登录账号：root" >> release.txt
-        echo "- 主要特性和插件：WiFi驱动使用v7.6.6.1-fw-20230808，默认支持IPv6，集成Docker，主要插件有luci-app-eqos-mtk，luci-app-passwall，luci-app-openclash，luci-app-homeproxy，应用过滤，组播转换，turboACC加速等" >> release.txt
+        echo "- 主要特性和插件：WiFi驱动使用v7.6.6.1-fw-20230808，默认支持IPv6，集成Docker，主要插件有luci-app-eqos-mtk，luci-app-passwall，luci-app-openclash，应用过滤，组播转换，turboACC加速等" >> release.txt
         if [[ "${{ env.BUILD_DOCKERMAN }}" == '-docker' ]]; then
                 echo "- 已编译luci-app-dockerman" >> release.txt
         else
@@ -208,7 +198,6 @@ jobs:
         fi
         echo "release_tag=${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}" >> $GITHUB_OUTPUT
         echo "status=success" >> $GITHUB_OUTPUT
-
     - name: 发布固件至Release
       uses: softprops/action-gh-release@v2.1.0
       if: steps.tag.outputs.status == 'success' && !cancelled()
