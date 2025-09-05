@@ -9,7 +9,7 @@
 # Description: Source code update checker
 #
 
-name: new-MT7981-AX3000
+name: rax3000m-emmc
 
 env:
   REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-6.6
