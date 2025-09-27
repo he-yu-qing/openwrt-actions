@@ -194,7 +194,7 @@ jobs:
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
         touch release.txt
-        echo "- 适配机型：京东云百里AX6000 (JDCloud_re-cp-03)" >> release.txt
+        echo "- 适配机型：京东云百里AX6000 (JDCloud_re-cp-03)hanwckf" >> release.txt
         echo "- 使用源码：${{ env.REPO_URL }}" >> release.txt
         echo "- 使用分支：openwrt-21.02" >> release.txt
         echo "- 内核版本：5.4.284" >> release.txt
