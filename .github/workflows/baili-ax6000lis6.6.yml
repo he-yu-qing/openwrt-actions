@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 ###############手动修改##############
-name: baili-ax6000lis6.6
+name: baili-ax6000精简6.6
 
 on:
   repository_dispatch:
