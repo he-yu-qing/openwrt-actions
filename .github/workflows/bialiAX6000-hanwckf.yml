@@ -194,10 +194,10 @@ jobs:
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
         touch release.txt
-        echo "- 适配机型：京东云百里AX6000 (hanwckf)" >> release.txt
+        echo "- 适配机型：京东云百里AX6000 (JDCloud_re-cp-03)" >> release.txt
         echo "- 使用源码：${{ env.REPO_URL }}" >> release.txt
         echo "- 使用分支：openwrt-21.02" >> release.txt
-        echo "- 内核版本：5.4.284" >> release.txt
+        echo "- 内核版本：5.4.28" >> release.txt
         echo "- 登录地址：${{ env.IP_ADDR }}" >> release.txt
         echo "- 登录账号：root" >> release.txt
         echo "- 主要特性和插件：WiFi驱动使用v7.6.6.1-fw-20230808，默认支持IPv6，集成Docker，主要插件有luci-app-eqos-mtk，luci-app-passwall，luci-app-openclash，luci-app-homeproxy，应用过滤，组播转换，turboACC加速等" >> release.txt
