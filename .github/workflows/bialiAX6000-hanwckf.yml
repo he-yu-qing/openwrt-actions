@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 ###############手动修改##############
-name: bialiAX6000-hanwckf
+name: hanwckf-ax6000lis6.6
 
 on:
   repository_dispatch:
@@ -32,10 +32,10 @@ on:
 
 env:
   ###############手动修改##############
-  OPENWRT_NAME: JDC-AX6000-5.428
+  OPENWRT_NAME: JDC-AX6000-6.6
   REPO_URL: https://github.com/hanwckf/immortalwrt-mt798x
-  REPO_BRANCH: openwrt-21.02
-  FEEDS_CONF: jdc-ax6000/hanwckffeeds.conf.default
+  REPO_BRANCH: openwrt-21.02-5.4
+  FEEDS_CONF: jdc-ax6000/hanwckf.config
   CONFIG_FILE: jdc-ax6000/hanwckf.config
   DIY_P1_SH: jdc-ax6000/diy-part1.sh
   DIY_P2_SH: jdc-ax6000/diy-part2.sh
