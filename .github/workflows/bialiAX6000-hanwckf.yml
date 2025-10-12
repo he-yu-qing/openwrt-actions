@@ -33,7 +33,7 @@ on:
 env:
   ###############手动修改##############
   OPENWRT_NAME: JDC-AX6000-6.6
-  REPO_URL: https://github.com/hanwckf/immortalwrt-mt798x
+  REPO_URL: https://github.com/he-yu-qing/hanwckfimmortalwrt-mt798x
   REPO_BRANCH: openwrt-21.02
   FEEDS_CONF: jdc-ax6000/hanwckffeeds.conf.default
   CONFIG_FILE: jdc-ax6000/hanwckf.config
