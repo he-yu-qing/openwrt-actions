@@ -194,35 +194,15 @@ jobs:
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
         touch release.txt
-        echo "- 适配机型：京东云百里AX6000 (JDCloud_re-cp-03)" >> release.txt
         echo "- 使用源码：${{ env.REPO_URL }}" >> release.txt
-        echo "- 使用分支：openwrt-24.10-6.6" >> release.txt
-        echo "- 内核版本：6.6.93" >> release.txt
+        echo "- 使用分支：${{ env.REPO_BRANCH }}" >> release.txt
         echo "- 登录地址：${{ env.IP_ADDR }}" >> release.txt
-        echo "- 登录账号：root" >> release.txt
-        echo "- 主要特性和插件：WiFi驱动使用v7.6.6.1-fw-20230808，默认支持IPv6，集成Docker，主要插件有luci-app-eqos-mtk，luci-app-passwall，luci-app-openclash，luci-app-homeproxy，应用过滤，组播转换，turboACC加速等" >> release.txt
         if [[ "${{ env.BUILD_DOCKERMAN }}" == '-docker' ]]; then
                 echo "- 已编译luci-app-dockerman" >> release.txt
         else
                 echo "- 未编译luci-app-dockerman" >> release.txt
         fi
-        
-        # 修复：生成符合 GitHub 规范的 tag_name
-        # 移除所有开头和结尾的破折号，确保格式正确
-        CLEAN_DOCKERMAN=$(echo "${{ env.BUILD_DOCKERMAN }}" | sed 's/^-*//' | sed 's/-*$//')
-        if [[ -n "$CLEAN_DOCKERMAN" && "$CLEAN_DOCKERMAN" != "-" ]]; then
-            DOCKERMAN_SUFFIX="-$CLEAN_DOCKERMAN"
-        else
-            DOCKERMAN_SUFFIX=""
-        fi
-        
-        # 构建最终的 tag_name
-        FINAL_TAG="${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}$DOCKERMAN_SUFFIX"
-        
-        # 再次清理确保没有非法字符
-        CLEAN_TAG=$(echo "$FINAL_TAG" | sed 's/^-*//' | sed 's/-*$//')
-        
-        echo "release_tag=$CLEAN_TAG" >> $GITHUB_OUTPUT
+        echo "release_tag=${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}" >> $GITHUB_OUTPUT
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: 发布固件至Release
@@ -232,6 +212,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         files: ${{ env.FIRMWARE }}/*
-        name: ${{ steps.tag.outputs.release_tag }}
+        name: ${{ env.FILE_DATE }}-${{ env.DEVICE_NAME }}
         tag_name: ${{ steps.tag.outputs.release_tag }}
         body_path: release.txt
