@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 ###############手动修改##############
-name: yhbaili-ax6000
+name: baili-ax6000lis6.6
 
 on:
   repository_dispatch:
@@ -43,8 +43,6 @@ env:
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
-  # 新增：指定源码日期
-  SOURCE_DATE: "2025-10-21"
 
 jobs:
   build:
@@ -85,17 +83,12 @@ jobs:
         large-packages: true
         swap-storage: true
 
-    - name: 下载固件源码（指定日期）
+    - name: 下载固件源码（限定2025-10-21日前修改）
       working-directory: /workdir
       run: |
         df -hT $PWD
-        git clone $REPO_URL -b $REPO_BRANCH openwrt
-        cd openwrt
-        # 切换到指定日期前的最后一个提交
-        COMMIT_HASH=$(git rev-list -1 --before="${{ env.SOURCE_DATE }}" HEAD)
-        echo "切换到提交: $COMMIT_HASH"
-        git checkout $COMMIT_HASH
-        cd ..
+        # 通过--shallow-since参数拉取指定日期前的代码
+        git clone $REPO_URL -b $REPO_BRANCH --shallow-since=2025-10-21 openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
     - name: 加载feeds.conf.default & DIY_P1_SH
@@ -105,28 +98,10 @@ jobs:
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
 
-    - name: 更新 & 安装 feeds（同步日期）
+    - name: 更新 & 安装 feeds
       run: |
         cd openwrt
         ./scripts/feeds update -a
-        
-        # 将主要feed也切换到相同日期前的状态
-        echo "同步feeds到指定日期前..."
-        for feed_dir in packages luci routing telephony; do
-          if [ -d "feeds/$feed_dir" ] && [ -d "feeds/$feed_dir/.git" ]; then
-            echo "处理 feed: $feed_dir"
-            cd "feeds/$feed_dir"
-            FEED_COMMIT=$(git rev-list -1 --before="${{ env.SOURCE_DATE }}" HEAD)
-            if [ ! -z "$FEED_COMMIT" ]; then
-              git checkout $FEED_COMMIT
-              echo "  -> 切换到提交: $FEED_COMMIT"
-            else
-              echo "  -> 警告: 未找到指定日期前的提交"
-            fi
-            cd ../..
-          fi
-        done
-        
         ./scripts/feeds install -a
 
     - name: 加载config & DIY_P2_SH
@@ -220,14 +195,9 @@ jobs:
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
         touch release.txt
-        echo "- 适配机型：京东云百里AX6000 (JDCloud_re-cp-03)" >> release.txt
         echo "- 使用源码：${{ env.REPO_URL }}" >> release.txt
-        echo "- 使用分支：openwrt-24.10-6.6" >> release.txt
-        echo "- 内核版本：6.6.93" >> release.txt
-        echo "- 源码日期：${{ env.SOURCE_DATE }}前的最后提交" >> release.txt
+        echo "- 使用分支：${{ env.REPO_BRANCH }}" >> release.txt
         echo "- 登录地址：${{ env.IP_ADDR }}" >> release.txt
-        echo "- 登录账号：root" >> release.txt
-        echo "- 主要特性和插件：WiFi驱动使用v7.6.6.1-fw-20230808，默认支持IPv6，集成Docker，主要插件有luci-app-eqos-mtk，luci-app-passwall，luci-app-openclash，luci-app-homeproxy，应用过滤，组播转换，turboACC加速等" >> release.txt
         if [[ "${{ env.BUILD_DOCKERMAN }}" == '-docker' ]]; then
                 echo "- 已编译luci-app-dockerman" >> release.txt
         else
@@ -243,6 +213,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         files: ${{ env.FIRMWARE }}/*
-        name: ${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}
+        name: ${{ env.FILE_DATE }}-${{ env.DEVICE_NAME }}
         tag_name: ${{ steps.tag.outputs.release_tag }}
         body_path: release.txt
