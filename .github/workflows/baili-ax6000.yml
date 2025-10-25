@@ -83,12 +83,13 @@ jobs:
         large-packages: true
         swap-storage: true
 
-    - name: 下载固件源码（限定2025-10-21日前修改）
+    - name: 下载固件源码（完整克隆+限定2025-10-21日前版本）
       working-directory: /workdir
       run: |
         df -hT $PWD
-        # 通过--shallow-since参数拉取指定日期前的代码
-        git clone $REPO_URL -b $REPO_BRANCH --shallow-since=2025-10-21 openwrt
+        git clone $REPO_URL -b $REPO_BRANCH openwrt
+        cd openwrt
+        git checkout $(git rev-list -n 1 --before="2025-10-21" HEAD)
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
     - name: 加载feeds.conf.default & DIY_P1_SH
