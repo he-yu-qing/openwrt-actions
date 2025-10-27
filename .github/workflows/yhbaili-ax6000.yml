@@ -1,4 +1,3 @@
-#
 # Copyright (c) 2019-2020 P3TERX <https://p3terx.com>
 #
 # This is free software, licensed under the MIT License.
@@ -33,7 +32,7 @@ on:
 env:
   ###############手动修改##############
   OPENWRT_NAME: JDC-AX6000-6.6
-  REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-6.6
+  REPO_URL: https://github.com/he-yu-qing/237immortalwrt-mt798x-6.6
   REPO_BRANCH: openwrt-24.10-6.6
   FEEDS_CONF: jdc-ax6000/feeds.conf.default
   CONFIG_FILE: jdc-ax6000/yh.config
