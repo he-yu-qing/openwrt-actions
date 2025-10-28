@@ -35,9 +35,10 @@ env:
   REPO_URL: https://github.com/he-yu-qing/237immortalwrt-mt798x-6.6
   REPO_BRANCH: openwrt-24.10-6.6
   FEEDS_CONF: jdc-ax6000/feeds.conf.default
-  CONFIG_FILE: jdc-ax6000/yh.config
+  CONFIG_FILE: jdc-ax6000/new.config
   DIY_P1_SH: jdc-ax6000/diy-part1.sh
   DIY_P2_SH: jdc-ax6000/diy-part2.sh
+  SSH_ACTIONS: false
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
@@ -59,8 +60,7 @@ jobs:
       run: |
         sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
         sudo -E apt-get -qq update
-        # 使用Ubuntu 22.04适配的依赖列表
-        sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com/P3TERX/Actions-OpenWrt/main/depends-ubuntu-2204)
+        sudo -E apt-get -qq install $(curl -fsSL git.io/depends-ubuntu-2004)
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
@@ -70,51 +70,55 @@ jobs:
     - name: 清理磁盘空间(Ubuntu)
       uses: jlumbroso/free-disk-space@main
       with:
+        # this might remove tools that are actually needed,
+        # when set to "true" but frees about 6 GB
         tool-cache: true
+        
+        # all of these default to true, but feel free to set to
+        # "false" if necessary for your workflow
         android: true
         dotnet: true
         haskell: true
         large-packages: true
         swap-storage: true
 
-    - name: 下载固件源码（根目录设为openwrt）
+    - name: 下载固件源码
       working-directory: /workdir
       run: |
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         cd openwrt
         git checkout 2cf4695e63dee915edc46dee0b4cef729e352b0e
-        # 链接到工作区，后续步骤直接在openwrt目录操作
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-        # 切换工作目录到openwrt（核心：后续步骤默认在openwrt目录执行）
-        echo "::set-output name=workdir::/workdir/openwrt"
 
     - name: 加载feeds.conf.default & DIY_P1_SH
-      working-directory: /workdir/openwrt  # 已在openwrt目录
       run: |
-        [ -e $GITHUB_WORKSPACE/$FEEDS_CONF ] && mv $GITHUB_WORKSPACE/$FEEDS_CONF feeds.conf.default
-        chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH
+        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
+        chmod +x $DIY_P1_SH
+        cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
 
     - name: 更新 & 安装 feeds
-      working-directory: /workdir/openwrt
       run: |
+        cd openwrt
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
     - name: 加载config & DIY_P2_SH
-      working-directory: /workdir/openwrt
       run: |
-        [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && mv $GITHUB_WORKSPACE/$CONFIG_FILE .config
-        chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
+        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+        chmod +x $DIY_P2_SH
+        cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
 
     - name: 设置LAN IP地址（路由器登录地址）
-      working-directory: /workdir/openwrt
       run: |
+        cd openwrt
         SET_IP=${{ github.event.inputs.LAN_IP }}
         if [[ $SET_IP =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; then
+            #修改immortalwrt.lan关联IP
             sed -i "s/192\.168\.[0-9]*\.[0-9]*/$SET_IP/g" $(find feeds/luci/modules/luci-mod-system -type f -name "flash.js")
+            #修改默认IP地址
             sed -i "s/192\.168\.[0-9]*\.[0-9]*/$SET_IP/g" package/base-files/files/bin/config_generate
             echo "Set LAN IP Address: $SET_IP"
         else
@@ -123,40 +127,9 @@ jobs:
 
     - name: 取消编译dockerman
       if: github.event.inputs.NO_DOCKERMAN == 'true'
-      working-directory: /workdir/openwrt
       run: |
+        cd openwrt
         sed -i '/CONFIG_PACKAGE_luci-app-dockerman=y/d' .config
-
-    - name: 下载安装包（生成staging_dir目录）
-      id: package
-      working-directory: /workdir/openwrt
-      run: |
-        make defconfig  # 关键：生成staging_dir目录结构
-        make download -j$(nproc)
-        find dl -size -1024c -exec ls -l {} \;
-        find dl -size -1024c -exec rm -f {} \;
-
-    # 核心修复步骤：在staging_dir生成后执行，根目录为openwrt
-    - name: 修复WiFi编译依赖（复制warp头文件+权限调整）
-      working-directory: /workdir/openwrt
-      run: |
-        # 强制创建目标目录（确保存在）
-        mkdir -p staging_dir/target-aarch64_cortex-a53_musl/usr/include/
-        # 复制warp头文件（源路径为当前目录下的package/...）
-        cp -r package/mtk/drivers/warp/src/* staging_dir/target-aarch64_cortex-a53_musl/usr/include/
-        # 校验文件是否存在（日志可见）
-        ls staging_dir/target-aarch64_cortex-a53_musl/usr/include/mcu/warp_wo.h
-        ls staging_dir/target-aarch64_cortex-a53_musl/usr/include/warp.h
-        ls staging_dir/target-aarch64_cortex-a53_musl/usr/include/warp_wifi.h
-        # 调整权限
-        chmod -R 644 staging_dir/target-aarch64_cortex-a53_musl/usr/include/*
-        chmod -R 755 staging_dir/target-aarch64_cortex-a53_musl/usr/include/mcu
-        # 清理缓存
-        rm -rf build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/mt_wifi
-        make -j1 V=s package/mtk/drivers/mt_wifi/clean
-        make -j1 V=s package/mtk/drivers/warp/clean
-        # 单独编译mt_wifi
-        make -j1 V=s package/mtk/drivers/mt_wifi/compile
 
     - name: SSH链接管理
       uses: P3TERX/ssh2actions@v1.0.0
@@ -164,6 +137,15 @@ jobs:
       env:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
+    - name: 下载安装包
+      id: package
+      run: |
+        cd openwrt
+        make defconfig
+        make download -j$(nproc)
+        find dl -size -1024c -exec ls -l {} \;
+        find dl -size -1024c -exec rm -f {} \;
 
     - name: 编译固件
       id: compile
@@ -192,8 +174,8 @@ jobs:
     - name: 整理文件并重命名
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
-      working-directory: /workdir/openwrt/bin/targets/*/*
       run: | 
+        cd openwrt/bin/targets/*/*
         rm -rf packages
         find ./ -iregex ".*\(bl31-uboot.fip\|gpt.bin\|preloader.bin\|bl2.bin\)$" -exec rm -rf {} +
         sudo -E apt-get -qq install rename
@@ -211,12 +193,11 @@ jobs:
     - name: 生成固件Release标签
       id: tag
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
-      working-directory: /workdir/openwrt
       run: |
         touch release.txt
         echo "- 使用源码：${{ env.REPO_URL }}" >> release.txt
         echo "- 使用分支：${{ env.REPO_BRANCH }}" >> release.txt
-        echo "- 使用Commit：$(git rev-parse --short HEAD)" >> release.txt  # 动态获取当前Commit
+        echo "- 使用Commit：f712cc381b2364560617e4ad7d31e28a8efb61cd" >> release.txt
         echo "- 登录地址：${{ env.IP_ADDR }}" >> release.txt
         if [[ "${{ env.BUILD_DOCKERMAN }}" == '-docker' ]]; then
                 echo "- 已编译luci-app-dockerman" >> release.txt
@@ -235,4 +216,4 @@ jobs:
         files: ${{ env.FIRMWARE }}/*
         name: ${{ env.FILE_DATE }}-${{ env.DEVICE_NAME }}
         tag_name: ${{ steps.tag.outputs.release_tag }}
-        body_path: /workdir/openwrt/release.txt
+        body_path: release.txt
