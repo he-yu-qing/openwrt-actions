@@ -7,7 +7,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 ###############手动修改##############
-name: yhbaili-ax60006.6
+name: new
 
 on:
   repository_dispatch:
