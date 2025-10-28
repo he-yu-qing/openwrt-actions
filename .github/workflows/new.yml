@@ -128,20 +128,18 @@ jobs:
     - name: 修复WiFi编译依赖（复制warp头文件+权限调整）
       run: |
         cd openwrt
-        # 复制warp头文件到编译目录
+    # 关键：先创建目标目录（确保存在，避免目录未生成的问题）
+        mkdir -p staging_dir/target-aarch64_cortex-a53_musl/usr/include/
+    # 复制warp头文件到编译目录
         cp -r package/mtk/drivers/warp/src/* staging_dir/target-aarch64_cortex-a53_musl/usr/include/
-        # 校验文件是否存在（日志可见）
-        ls staging_dir/target-aarch64_cortex-a53_musl/usr/include/mcu/warp_wo.h
-        ls staging_dir/target-aarch64_cortex-a53_musl/usr/include/warp.h
-        ls staging_dir/target-aarch64_cortex-a53_musl/usr/include/warp_wifi.h
-        # 调整权限
+    # 调整权限
         chmod -R 644 staging_dir/target-aarch64_cortex-a53_musl/usr/include/*
         chmod -R 755 staging_dir/target-aarch64_cortex-a53_musl/usr/include/mcu
-        # 清理缓存
+    # 清理缓存
         rm -rf build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/mt_wifi
         make -j1 V=s package/mtk/drivers/mt_wifi/clean
         make -j1 V=s package/mtk/drivers/warp/clean
-        # 单独编译mt_wifi
+    # 单独编译mt_wifi
         make -j1 V=s package/mtk/drivers/mt_wifi/compile
 
     - name: SSH链接管理
