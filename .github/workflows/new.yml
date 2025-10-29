@@ -82,6 +82,16 @@ jobs:
         large-packages: true
         swap-storage: true
 
+      # 新增：复制 warp 头文件到 staging_dir（复现本地 cp 操作）
+      - name: 复制 warp 头文件并配置权限
+      run: |
+          # 1. 复制 src 下所有头文件到编译依赖目录（和本地 cp 一致）
+        cp -r package/mtk/drivers/warp/src/* staging_dir/target-aarch64_cortex-a53_musl/usr/include/
+          # 2. 配置权限（和本地 chmod 一致）
+          chmod -R 644 staging_dir/target-aarch64_cortex-a53_musl/usr/include/*
+          chmod -R 755 staging_dir/target-aarch64_cortex-a53_musl/usr/include/mcu
+          chmod -R 755 staging_dir/target-aarch64_cortex-a53_musl/usr/include/
+          find staging_dir/target-aarch64_cortex-a53_musl/usr/include/ -type f -exec chmod 644 {} \;
     - name: 下载固件源码
       working-directory: /workdir
       run: |
