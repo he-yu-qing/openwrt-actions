@@ -149,14 +149,8 @@ jobs:
     - name: 复制 warp 头文件并配置权限
       run: |
         cd openwrt
-# 确保目标目录存在
         mkdir -p staging_dir/target-aarch64_cortex-a53_musl/usr/include/
-# 修复复制命令
         cp -rL --no-preserve=mode package/mtk/drivers/warp/src/* staging_dir/target-aarch64_cortex-a53_musl/usr/include/
-# 用sudo提升权限修改权限
-        sudo chmod -R 644 staging_dir/target-aarch64_cortex-a53_musl/usr/include/*
-        sudo chmod -R 755 staging_dir/target-aarch64_cortex-a53_musl/usr/include/mcu
-        sudo chmod -R 755 staging_dir/target-aarch64_cortex-a53_musl/usr/include/
         sudo find staging_dir/target-aarch64_cortex-a53_musl/usr/include/ -type f -exec chmod 644 {} \;
 
     - name: 编译固件
