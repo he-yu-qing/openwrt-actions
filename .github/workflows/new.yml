@@ -151,6 +151,7 @@ jobs:
         cd openwrt
         mkdir -p staging_dir/target-aarch64_cortex-a53_musl/usr/include/
         cp -rL --no-preserve=mode package/mtk/drivers/warp/src/* staging_dir/target-aarch64_cortex-a53_musl/usr/include/
+        cp -rL --no-preserve=mode package/mtk/drivers/mt_wifi/src/mt_wifi/embedded/common/* staging_dir/target-aarch64_cortex-a53_musl/usr/include/
         sudo find staging_dir/target-aarch64_cortex-a53_musl/usr/include/ -type f -exec chmod 644 {} \;
 
     - name: 编译固件
