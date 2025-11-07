@@ -7,7 +7,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 ###############手动修改##############
-name: new
+name: newchuan
 
 on:
   repository_dispatch:
