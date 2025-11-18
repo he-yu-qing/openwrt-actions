@@ -35,7 +35,7 @@ env:
   REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-6.6
   REPO_BRANCH: openwrt-24.10-6.6
   FEEDS_CONF: jdc-ax6000/feeds.conf.default
-  CONFIG_FILE: jdc-ax6000/new15.config
+  CONFIG_FILE: jdc-ax6000/new17.config
   DIY_P1_SH: jdc-ax6000/diy-part1.sh
   DIY_P2_SH: jdc-ax6000/diy-part2.sh
   SSH_ACTIONS: false
@@ -146,12 +146,12 @@ jobs:
         find dl -size -1024c -exec rm -f {} \;
         
       # 新增：复制 warp 头文件到 staging_dir（复现本地 cp 操作）
-    - name: 复制 warp 头文件并配置权限
-      run: |
-        cd openwrt
-        mkdir -p staging_dir/target-aarch64_cortex-a53_musl/usr/include/
-        cp -rL --no-preserve=mode package/mtk/drivers/warp/src/* staging_dir/target-aarch64_cortex-a53_musl/usr/include/
-        sudo find staging_dir/target-aarch64_cortex-a53_musl/usr/include/ -type f -exec chmod 644 {} \;
+    #- name: 复制 warp 头文件并配置权限
+      #run: |
+        #cd openwrt
+        #mkdir -p staging_dir/target-aarch64_cortex-a53_musl/usr/include/
+        #cp -rL --no-preserve=mode package/mtk/drivers/warp/src/* staging_dir/target-aarch64_cortex-a53_musl/usr/include/
+        #sudo find staging_dir/target-aarch64_cortex-a53_musl/usr/include/ -type f -exec chmod 644 {} \;
 
     - name: 编译固件
       id: compile
