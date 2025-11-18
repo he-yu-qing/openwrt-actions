@@ -146,12 +146,12 @@ jobs:
         find dl -size -1024c -exec rm -f {} \;
         
       # 新增：复制 warp 头文件到 staging_dir（复现本地 cp 操作）
-    - name: 复制 warp 头文件并配置权限
-      run: |
-        cd openwrt
-        mkdir -p staging_dir/target-aarch64_cortex-a53_musl/usr/include/
-        cp -rL --no-preserve=mode package/mtk/drivers/warp/src/* staging_dir/target-aarch64_cortex-a53_musl/usr/include/
-        sudo find staging_dir/target-aarch64_cortex-a53_musl/usr/include/ -type f -exec chmod 644 {} \;
+    #- name: 复制 warp 头文件并配置权限
+      #run: |
+        #cd openwrt
+        #mkdir -p staging_dir/target-aarch64_cortex-a53_musl/usr/include/
+        #cp -rL --no-preserve=mode package/mtk/drivers/warp/src/* staging_dir/target-aarch64_cortex-a53_musl/usr/include/
+        #sudo find staging_dir/target-aarch64_cortex-a53_musl/usr/include/ -type f -exec chmod 644 {} \;
 
     - name: 编译固件
       id: compile
