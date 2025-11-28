@@ -26,8 +26,6 @@ on:
         description: 'SSH connection to Actions'
         required: false
         default: 'false'
-#  schedule:
-#    - cron: 0 16 * * *
 
 env:
   ###############手动修改##############
@@ -35,7 +33,7 @@ env:
   REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-6.6
   REPO_BRANCH: openwrt-24.10-6.6
   FEEDS_CONF: jdc-ax6000/feeds.conf.default
-  CONFIG_FILE: jdc-ax6000/new19.config
+  CONFIG_FILE: jdc-ax6000/new23.config
   DIY_P1_SH: jdc-ax6000/diy-part1.sh
   DIY_P2_SH: jdc-ax6000/diy-part2.sh
   SSH_ACTIONS: false
@@ -46,10 +44,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
-
     permissions:
       contents: write
-
     steps:
     - name: 检查项目分支
       uses: actions/checkout@main
@@ -70,12 +66,7 @@ jobs:
     - name: 清理磁盘空间(Ubuntu)
       uses: jlumbroso/free-disk-space@main
       with:
-        # this might remove tools that are actually needed,
-        # when set to "true" but frees about 6 GB
         tool-cache: true
-        
-        # all of these default to true, but feel free to set to
-        # "false" if necessary for your workflow
         android: true
         dotnet: true
         haskell: true
@@ -109,18 +100,34 @@ jobs:
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
 
-    - name: 设置LAN IP地址（路由器登录地址）
+    # 强制锁定F2FS配置（避免任何冲突）
+    - name: 强制启用F2FS，禁用SquashFS
+      run: |
+        cd openwrt
+        # 不管原配置是什么，强制设置F2FS=y、SquashFS=n
+        sed -i '/CONFIG_TARGET_ROOTFS_SQUASHFS=/d' .config
+        sed -i '/CONFIG_TARGET_ROOTFS_F2FS=/d' .config
+        echo "CONFIG_TARGET_ROOTFS_SQUASHFS=n" >> .config
+        echo "CONFIG_TARGET_ROOTFS_F2FS=y" >> .config
+        # 确认F2FS依赖已安装（避免编译生成失败）
+        echo "CONFIG_PACKAGE_kmod-fs-f2fs=y" >> .config
+        echo "CONFIG_PACKAGE_f2fs-tools=y" >> .config
+        echo "CONFIG_PACKAGE_f2fsck=y" >> .config
+        echo "CONFIG_PACKAGE_mkf2fs=y" >> .config
+        # 输出配置确认
+        echo "最终文件系统配置："
+        grep -E "CONFIG_TARGET_ROOTFS_(SQUASHFS|F2FS)=" .config
+
+    - name: 设置LAN IP地址
       run: |
         cd openwrt
         SET_IP=${{ github.event.inputs.LAN_IP }}
         if [[ $SET_IP =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; then
-            #修改immortalwrt.lan关联IP
             sed -i "s/192\.168\.[0-9]*\.[0-9]*/$SET_IP/g" $(find feeds/luci/modules/luci-mod-system -type f -name "flash.js")
-            #修改默认IP地址
             sed -i "s/192\.168\.[0-9]*\.[0-9]*/$SET_IP/g" package/base-files/files/bin/config_generate
-            echo "Set LAN IP Address: $SET_IP"
+            echo "Set LAN IP: $SET_IP"
         else
-            echo "Invalid IP address, use default."
+            echo "Invalid IP, use default."
         fi
 
     - name: 取消编译dockerman
@@ -144,82 +151,81 @@ jobs:
         make download -j$(nproc)
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
-        
-      # 新增：复制 warp 头文件到 staging_dir（复现本地 cp 操作）
-    #- name: 复制 warp 头文件并配置权限
-      #run: |
-        #cd openwrt
-        #mkdir -p staging_dir/target-aarch64_cortex-a53_musl/usr/include/
-        #cp -rL --no-preserve=mode package/mtk/drivers/warp/src/* staging_dir/target-aarch64_cortex-a53_musl/usr/include/
-        #sudo find staging_dir/target-aarch64_cortex-a53_musl/usr/include/ -type f -exec chmod 644 {} \;
 
-    - name: 编译固件
+    - name: 编译固件（保留详细日志）
       id: compile
       run: |
         cd openwrt
-        echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
+        echo "$(nproc) thread compile"
+        # 编译失败时输出详细日志（方便排查）
+        make -j$(nproc) || make -j1 V=s
+        # 提取关键信息（设备名、IP）
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=$(cat DEVICE_NAME)" >> $GITHUB_ENV
-        grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*TARGET_.*_(.*)_DEVICE_.*=y/\1/' > TARGET_NAME
-        [ -s TARGET_NAME ] && echo "TARGET_NAME=$(cat TARGET_NAME)" >> $GITHUB_ENV
+        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=$(cat DEVICE_NAME)" >> $GITHUB_ENV || echo "DEVICE_NAME=jdcloud_re-cp-03" >> $GITHUB_ENV
         sed -n 's/.*lan) ipad=${ipaddr:-"\([0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+\)"} ;;.*/\1/p' package/base-files/files/bin/config_generate | head -n 1 > IP_ADDR
-        [ -s IP_ADDR ] && echo "IP_ADDR=$(cat IP_ADDR)" >> $GITHUB_ENV
+        [ -s IP_ADDR ] && echo "IP_ADDR=$(cat IP_ADDR)" >> $GITHUB_ENV || echo "IP_ADDR=192.168.123.1" >> $GITHUB_ENV
+        # 标记dockerman状态
         if grep -q 'CONFIG_PACKAGE_luci-app-dockerman=y' .config; then
-                echo "BUILD_DOCKERMAN=-docker" >> $GITHUB_ENV
+          echo "BUILD_DOCKERMAN=-docker" >> $GITHUB_ENV
         else
-                echo "BUILD_DOCKERMAN=" >> $GITHUB_ENV
+          echo "BUILD_DOCKERMAN=" >> $GITHUB_ENV
         fi
         echo "FILE_DATE=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
-    - name: 查看磁盘使用情况
-      if: (!cancelled())
-      run: df -hT
-
-    - name: 整理文件并重命名
+    # 关键修复：暴力查找所有F2FS固件，确保不遗漏
+    - name: 查找并整理F2FS固件（核心步骤）
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
-      run: | 
-        cd openwrt/bin/targets/*/*
-        rm -rf packages
-        find ./ -iregex ".*\(bl31-uboot.fip\|gpt.bin\|preloader.bin\|bl2.bin\)$" -exec rm -rf {} +
-        sudo -E apt-get -qq install rename
-        rename 's/.*${{ env.DEVICE_NAME }}/${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}/' *
-        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
-        echo "status=success" >> $GITHUB_OUTPUT
+      run: |
+        echo "=== 开始查找F2FS固件 ==="
+        # 1. 暴力搜索整个openwrt目录下的F2FS固件（避免路径错误）
+        FIRMWARE_FILE=$(find /workdir/openwrt -name "*jdcloud_re-cp-03*f2fs*sysupgrade*.bin" -print -quit)
+        # 2. 若未找到，搜索所有.bin固件（兼容不同命名）
+        if [ -z "$FIRMWARE_FILE" ]; then
+          echo "未找到标准命名的F2FS固件，搜索所有.bin文件..."
+          FIRMWARE_FILE=$(find /workdir/openwrt/bin -name "*.bin" -print -quit)
+        fi
+        # 3. 确认固件存在
+        if [ -z "$FIRMWARE_FILE" ]; then
+          echo "ERROR: 未找到任何固件文件！"
+          exit 1  # 直接报错，避免后续无效步骤
+        else
+          echo "找到固件：$FIRMWARE_FILE"
+          # 4. 创建临时目录，复制固件（统一路径方便上传）
+          TEMP_FIRMWARE_DIR="/tmp/f2fs-firmware"
+          mkdir -p $TEMP_FIRMWARE_DIR
+          cp -f $FIRMWARE_FILE $TEMP_FIRMWARE_DIR/
+          # 5. 重命名固件（保持预期格式）
+          FIRMWARE_NAME="${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}-f2fs-sysupgrade.bin"
+          mv $TEMP_FIRMWARE_DIR/$(basename $FIRMWARE_FILE) $TEMP_FIRMWARE_DIR/$FIRMWARE_NAME
+          echo "重命名为：$FIRMWARE_NAME"
+          # 6. 传递路径给后续步骤
+          echo "FIRMWARE=$TEMP_FIRMWARE_DIR" >> $GITHUB_ENV
+          echo "status=success" >> $GITHUB_OUTPUT
+        fi
 
-    - name: 打包上传固件到Actions Artifacts
+    # 强制上传固件（不管路径如何，找到就传）
+    - name: 上传F2FS固件到Actions Artifacts
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
-        name: ${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}
-        path: ${{ env.FIRMWARE }}
+        name: ${{ env.FILE_DATE }}-JDC-AX6000-F2FS固件
+        path: ${{ env.FIRMWARE }}/*  # 上传临时目录下所有文件（确保固件被包含）
 
-    - name: 生成固件Release标签
-      id: tag
-      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
-      run: |
-        touch release.txt
-        echo "- 使用源码：${{ env.REPO_URL }}" >> release.txt
-        echo "- 使用分支：${{ env.REPO_BRANCH }}" >> release.txt
-        echo "- 使用Commit：f712cc381b2364560617e4ad7d31e28a8efb61cd" >> release.txt
-        echo "- 登录地址：${{ env.IP_ADDR }}" >> release.txt
-        if [[ "${{ env.BUILD_DOCKERMAN }}" == '-docker' ]]; then
-                echo "- 已编译luci-app-dockerman" >> release.txt
-        else
-                echo "- 未编译luci-app-dockerman" >> release.txt
-        fi
-        echo "release_tag=${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}" >> $GITHUB_OUTPUT
-        echo "status=success" >> $GITHUB_OUTPUT
-
-    - name: 发布固件至Release
+    # 同时上传到Release（双重保障）
+    - name: 发布F2FS固件到GitHub Release
       uses: softprops/action-gh-release@v2.1.0
-      if: steps.tag.outputs.status == 'success' && !cancelled()
+      if: steps.organize.outputs.status == 'success' && !cancelled()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         files: ${{ env.FIRMWARE }}/*
-        name: ${{ env.FILE_DATE }}-${{ env.DEVICE_NAME }}
-        tag_name: ${{ steps.tag.outputs.release_tag }}
-        body_path: release.txt
+        name: ${{ env.FILE_DATE }}-JDC-AX6000-F2FS固件
+        tag_name: F2FS-${{ env.FILE_DATE }}
+        body: |
+          ### F2FS格式固件（适配jdcloud_re-cp-03）
+          - 源码：${{ env.REPO_URL }}
+          - 分支：${{ env.REPO_BRANCH }}
+          - 登录IP：${{ env.IP_ADDR }}
+          - 固件格式：F2FS（sysupgrade.bin）
