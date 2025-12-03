@@ -253,22 +253,6 @@ config rule
 	option proto 'udp'
 	option target 'ACCEPT'
 
-config include 'homeproxy_forward'
-	option type 'nftables'
-	option path '/var/run/homeproxy/fw4_forward.nft'
-	option position 'chain-pre'
-	option chain 'forward'
-
-config include 'homeproxy_input'
-	option type 'nftables'
-	option path '/var/run/homeproxy/fw4_input.nft'
-	option position 'chain-pre'
-	option chain 'input'
-
-config include 'homeproxy_post'
-	option type 'nftables'
-	option path '/var/run/homeproxy/fw4_post.nft'
-	option position 'table-post'
 
 config zone
 	option name 'IPTV'
@@ -419,13 +403,6 @@ config rule
 	option target 'REJECT'
 	option family 'any'
 
-config redirect 'adguardhome_redirect'
-	option target 'DNAT'
-	option name 'AdGuard Home'
-	option src 'lan'
-	option family 'any'
-	option src_dport '53'
-	option dest_port '5553'
 EOF
 )
 
