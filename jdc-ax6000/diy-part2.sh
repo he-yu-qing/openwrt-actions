@@ -1,8 +1,16 @@
 #!/bin/bash
-# （保留原有版权注释...）
+#
+# Copyright (c) 2019-2020 P3TERX <https://p3terx.com>
+#
+# This is free software, licensed under the MIT License.
+# See /LICENSE for more information.
+#
+# https://github.com/P3TERX/Actions-OpenWrt
+# File name: diy-part2.sh
+# Description: OpenWrt DIY script part 2 (After Update feeds)
+#
 
 ##-----------------Del duplicate packages------------------
-# 关键修正：将该命令移出 RC_LOCAL，作为顶层命令（编译时执行）
 rm -rf feeds/packages/net/open-app-filter
 
 # ==================== 整合ZRAM+CPU绑定+看门狗到rc.local ====================
@@ -10,16 +18,15 @@ COMPLETE_RC_LOCAL=$(cat << 'EOF'
 #!/bin/sh
 
 # ==================== ZRAM内存优化（512MB）====================
-# 启用ZRAM压缩交换分区，释放物理内存，避免服务OOM崩溃
 modprobe zram
-echo lz4 > /sys/block/zram0/comp_algorithm  # 高效压缩算法（比gzip快）
-echo 536870912 > /sys/block/zram0/disksize  # 分配512MB ZRAM空间
-mkswap /dev/zram0                           # 格式化为swap分区
-swapon /dev/zram0                           # 启用swap
+echo lz4 > /sys/block/zram0/comp_algorithm
+echo 536870912 > /sys/block/zram0/disksize
+mkswap /dev/zram0
+swapon /dev/zram0
 echo "ZRAM已启用：512MB（lz4压缩），swap已激活"
 
 # ==================== CPU核心绑定（进程隔离）====================
-sleep 3  # 延迟3秒，等待核心进程启动
+sleep 3
 
 bind_process() {
     local pid=$(pidof $1)
@@ -29,13 +36,13 @@ bind_process() {
     fi
 }
 
-# 绑定网络基础进程到 CPU0+CPU1（0x3，低延迟优先）
+# 绑定网络基础进程到 CPU0+CPU1（0x3）
 bind_process "netifd" "3"
 bind_process "hostapd" "3"
 bind_process "dnsmasq" "3"
 bind_process "uhttpd" "3"
 
-# 绑定重负载进程到 CPU2+CPU3（0xc，高算力需求）
+# 绑定重负载进程到 CPU2+CPU3（0xc）
 bind_process "nftables" "c"
 bind_process "mtkwifi" "c"
 bind_process "homeproxy" "c"
@@ -49,7 +56,7 @@ echo "默认中断亲和性已设置为 0xf（所有CPU核心）"
 
 # ==================== 硬件看门狗（稳定兜底）====================
 if [ -f /dev/watchdog ]; then
-    watchdog -t 30 -v /dev/watchdog &  # 30秒喂狗，后台运行
+    watchdog -t 30 -v /dev/watchdog &
     echo "硬件看门狗已启动（喂狗间隔30秒，PID: $!）"
 else
     echo "警告：未找到硬件看门狗设备，跳过启用"
@@ -59,4 +66,371 @@ exit 0
 EOF
 )
 
-# （后续的 RC_LOCAL 覆盖、sysctl.conf 追加代码不变...）
+# 覆盖rc.local文件（核心执行步骤，之前缺失）
+RC_LOCAL="$GITHUB_WORKSPACE/openwrt/package/base-files/files/etc/rc.local"
+echo "$COMPLETE_RC_LOCAL" > $RC_LOCAL
+chmod +x $RC_LOCAL  # 赋予执行权限
+echo "ZRAM+CPU绑定+看门狗已整合到 /etc/rc.local"
+
+# ==================== 追加sysctl内核优化参数（核心执行步骤，之前缺失）====================
+SYSCTL_CONF="$GITHUB_WORKSPACE/openwrt/package/base-files/files/etc/sysctl.conf"
+cat >> "$SYSCTL_CONF" << EOF
+net.core.rmem_max = 33554432
+net.core.wmem_max = 33554432
+net.core.rmem_default = 1048576
+net.core.wmem_default = 1048576
+net.core.optmem_max = 65536
+net.core.somaxconn = 131072
+net.ipv4.tcp_mem = 102400 204800 409600
+net.core.netdev_max_backlog = 131072
+net.ipv4.ip_local_port_range = 1024 65535
+net.ipv4.tcp_congestion_control = bbr
+net.ipv4.tcp_bbr_cca_params = max_bw_gain:10,min_rtt_gain:2
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_fin_timeout = 30
+net.ipv4.tcp_tw_reuse = 1 
+net.ipv4.tcp_tw_recycle = 0  
+net.ipv4.tcp_max_tw_buckets = 2000000
+net.ipv4.tcp_max_syn_backlog = 65535
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_sack = 1
+net.ipv4.tcp_dsack = 1
+net.ipv4.tcp_fack = 1
+net.netfilter.nf_conntrack_max = 131072
+net.netfilter.nf_conntrack_tcp_timeout_established = 86400
+net.netfilter.nf_conntrack_tcp_timeout_time_wait = 30
+net.netfilter.nf_conntrack_udp_timeout = 30
+net.netfilter.nf_conntrack_udp_timeout_stream = 120
+net.ipv4.icmp_echo_ignore_broadcasts = 1
+net.ipv4.icmp_ignore_bogus_error_responses = 1
+net.ipv4.conf.all.accept_source_route = 0
+net.ipv4.conf.default.accept_source_route = 0
+net.ipv4.conf.all.rp_filter = 1
+net.ipv4.conf.default.rp_filter = 1
+net.ipv4.conf.all.send_redirects = 0
+net.ipv4.conf.default.send_redirects = 0
+vm.dirty_ratio = 30
+vm.dirty_background_ratio = 10
+fs.file-max = 1000000
+fs.inotify.max_user_instances = 8192
+vm.swappiness=10
+vm.vfs_cache_pressure=50
+net.ipv4.tcp_rmem=4096 131072 33554432
+net.ipv4.tcp_wmem=4096 131072 33554432
+EOF
+echo "sysctl内核优化参数已追加到 /etc/sysctl.conf"
+
+# ==================== 内置自定义防火墙规则 ====================
+CUSTOM_FIREWALL=$(cat << 'EOF'
+config defaults
+	option input 'REJECT'
+	option output 'ACCEPT'
+	option forward 'REJECT'
+	option flow_offloading '1'
+	option flow_offloading_hw '1'
+	option fullcone '0'
+	option fullcone6 '0'
+	option synflood_protect '1'
+
+config zone
+	option name 'lan'
+	list network 'lan'
+	option input 'ACCEPT'
+	option output 'ACCEPT'
+	option forward 'ACCEPT'
+	option masq '1'
+	option mtu_fix '1'
+
+config zone
+	option name 'wan'
+	option input 'REJECT'
+	option output 'ACCEPT'
+	option forward 'REJECT'
+	option masq '1'
+	option mtu_fix '1'
+	option log '1'
+	option log_level 'warning'
+	list network 'wan'
+	list network 'wan6'
+	list network 'moden'  # 注意：确认固件中接口名称是否为moden（建议检查是否为笔误modem）
+
+config forwarding
+	option src 'lan'
+	option dest 'wan'
+
+config rule
+	option name 'Allow-DHCP-Renew'
+	option src 'wan'
+	option proto 'udp'
+	option dest_port '68'
+	option target 'ACCEPT'
+	option family 'ipv4'
+
+config rule
+	option name 'Allow-Ping'
+	option src 'wan'
+	option proto 'icmp'
+	option icmp_type 'echo-request'
+	option family 'ipv4'
+	option target 'ACCEPT'
+	option enabled '0'
+
+config rule
+	option name 'Allow-IGMP'
+	option src 'wan'
+	option proto 'igmp'
+	option family 'ipv4'
+	option target 'ACCEPT'
+
+config rule
+	option name 'Allow-DHCPv6'
+	option src 'wan'
+	option proto 'udp'
+	option dest_port '546'
+	option family 'ipv6'
+	option target 'ACCEPT'
+
+config rule
+	option name 'Allow-MLD'
+	option src 'wan'
+	option proto 'icmp'
+	option src_ip 'fe80::/10'
+	list icmp_type '130/0'
+	list icmp_type '131/0'
+	list icmp_type '132/0'
+	list icmp_type '143/0'
+	option family 'ipv6'
+	option target 'ACCEPT'
+
+config rule
+	option name 'Allow-ICMPv6-Input'
+	option src 'wan'
+	option proto 'icmp'
+	list icmp_type 'echo-request'
+	list icmp_type 'echo-reply'
+	list icmp_type 'destination-unreachable'
+	list icmp_type 'packet-too-big'
+	list icmp_type 'time-exceeded'
+	list icmp_type 'bad-header'
+	list icmp_type 'unknown-header-type'
+	list icmp_type 'router-solicitation'
+	list icmp_type 'neighbour-solicitation'
+	list icmp_type 'router-advertisement'
+	list icmp_type 'neighbour-advertisement'
+	option limit '5/sec'
+	option limit_burst '10'
+	option family 'ipv6'
+	option target 'ACCEPT'
+
+config rule
+	option name 'Allow-ICMPv6-Forward'
+	option src 'wan'
+	option dest '*'
+	option proto 'icmp'
+	list icmp_type 'echo-request'
+	list icmp_type 'echo-reply'
+	list icmp_type 'destination-unreachable'
+	list icmp_type 'packet-too-big'
+	list icmp_type 'time-exceeded'
+	list icmp_type 'bad-header'
+	list icmp_type 'unknown-header-type'
+	option limit '1000/sec'
+	option family 'ipv6'
+	option target 'ACCEPT'
+
+config rule
+	option name 'Allow-IPSec-ESP'
+	option src 'wan'
+	option dest 'lan'
+	option proto 'esp'
+	option target 'ACCEPT'
+
+config rule
+	option name 'Allow-ISAKMP'
+	option src 'wan'
+	option dest 'lan'
+	option dest_port '500'
+	option proto 'udp'
+	option target 'ACCEPT'
+
+config include 'homeproxy_forward'
+	option type 'nftables'
+	option path '/var/run/homeproxy/fw4_forward.nft'
+	option position 'chain-pre'
+	option chain 'forward'
+
+config include 'homeproxy_input'
+	option type 'nftables'
+	option path '/var/run/homeproxy/fw4_input.nft'
+	option position 'chain-pre'
+	option chain 'input'
+
+config include 'homeproxy_post'
+	option type 'nftables'
+	option path '/var/run/homeproxy/fw4_post.nft'
+	option position 'table-post'
+
+config zone
+	option name 'IPTV'
+	option input 'ACCEPT'
+	option output 'ACCEPT'
+	option forward 'ACCEPT'
+	list network 'IPTV'
+
+config rule
+	option name 'IPTV-Allow-IGMP'
+	option src 'IPTV'
+	option proto 'igmp'
+	option target 'ACCEPT'
+	option family 'ipv4'
+
+config zone
+	option name 'wireguard'
+	option input 'REJECT'
+	option output 'ACCEPT'
+	option forward 'REJECT'
+	option masq '1'
+	option masq6 '1'
+	option log '1'
+	option mtu_fix '1'
+
+config rule
+	option name 'wireguard'
+	option src 'wan'
+	option target 'ACCEPT'
+	list proto 'udp'
+	option family 'ipv6'
+	option dest_port '64189'
+
+config rule
+	option name 'lenovo'
+	option direction 'in'
+	option device 'br-lan'
+	option src 'lan'
+	list src_mac 'DC:FB:48:29:EA:AF'
+	option dest 'wan'
+	option target 'REJECT'
+	option enabled '0'
+
+config rule
+	option name 'b590-0-8'
+	option direction 'in'
+	option device 'br-lan'
+	option src 'lan'
+	list src_mac '00:C2:C6:37:6D:1A'
+	option dest 'wan'
+	option target 'REJECT'
+	option enabled '0'
+	option start_time '00:00:00'
+	option stop_time '08:00:00'
+
+config rule
+	option name 'b590-22-24'
+	option direction 'in'
+	option device 'br-lan'
+	option src 'lan'
+	list src_mac '00:C2:C6:37:6D:1A'
+	option dest 'wan'
+	option target 'REJECT'
+	option start_time '22:00:00'
+	option stop_time '23:59:00'
+	option enabled '0'
+
+config rule
+	option name 'TV21:59'
+	option direction 'in'
+	option device 'br-lan'
+	option src 'lan'
+	list src_mac '38:C8:04:C5:56:B7'
+	list src_mac '3C:2C:A6:0F:36:D4'
+	option dest 'wan'
+	option target 'REJECT'
+	option start_time '21:59:00'
+	option stop_time '23:59:59'
+	option enabled '0'
+
+config rule
+	option name 'JK'
+	option direction 'in'
+	option device 'br-lan'
+	option src 'lan'
+	list src_mac '4C:F5:DC:D6:6B:00'
+	option dest 'wan'
+	option target 'REJECT'
+	option enabled '0'
+
+config rule
+	option name 'MI8'
+	option direction 'in'
+	option device 'br-lan'
+	option src 'lan'
+	list src_mac 'A4:50:46:E9:F8:18'
+	option dest 'wan'
+	option target 'REJECT'
+	option enabled '0'
+
+config rule
+	option name 'TV'
+	option direction 'in'
+	option device 'br-lan'
+	option src 'lan'
+	list src_mac '38:C8:04:C5:56:B7'
+	list src_mac '3C:2C:A6:0F:36:D4'
+	option dest 'wan'
+	option target 'REJECT'
+	option start_time '15:35:00'
+	option stop_time '23:59:59'
+	option enabled '0'
+
+config rule
+	option name '小爱'
+	option direction 'in'
+	option device 'br-lan'
+	option src 'lan'
+	option dest 'wan'
+	option target 'REJECT'
+	list src_mac '5C:02:14:E3:24:AE'
+	option enabled '0'
+
+config rule
+	option name 'k30'
+	option direction 'in'
+	option device 'br-lan'
+	option src 'lan'
+	option dest 'wan'
+	option target 'REJECT'
+	list src_mac '4C:63:71:0D:FD:79'
+	option enabled '0'
+
+config rule
+	option name 'Allow-Router-DNS'
+	option src 'lan'
+	option proto 'tcp udp'
+	option dest_port '53'
+	option dest_ip '192.168.123.1'
+	option target 'ACCEPT'
+	option family 'any'
+
+config rule
+	option name 'Block-External-DNS'
+	option src 'lan'
+	option proto 'tcp udp'
+	option dest_port '53'
+	option target 'REJECT'
+	option family 'any'
+
+config redirect 'adguardhome_redirect'
+	option target 'DNAT'
+	option name 'AdGuard Home'
+	option src 'lan'
+	option family 'any'
+	option src_dport '53'
+	option dest_port '5553'
+EOF
+)
+
+# 覆盖默认防火墙配置
+DEFAULT_FIREWALL_PATH="$GITHUB_WORKSPACE/openwrt/package/network/config/firewall/files/firewall.config"
+echo "$CUSTOM_FIREWALL" > "$DEFAULT_FIREWALL_PATH"
+chmod 644 "$DEFAULT_FIREWALL_PATH"
+echo "自定义防火墙规则已成功覆盖默认配置！路径：$DEFAULT_FIREWALL_PATH"
