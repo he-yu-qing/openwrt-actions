@@ -208,7 +208,7 @@ jobs:
         touch release.txt
         echo "- 使用源码：${{ env.REPO_URL }}" >> release.txt
         echo "- 使用分支：${{ env.REPO_BRANCH }}" >> release.txt
-        echo "- 使用Commit：50f7facf5b8f201d49aebdf60e451865f8c80028" >> release.txt
+        echo "- 使用Commit：f712cc381b2364560617e4ad7d31e28a8efb61cd" >> release.txt
         echo "- 登录地址：${{ env.IP_ADDR }}" >> release.txt
         if [[ "${{ env.BUILD_DOCKERMAN }}" == '-docker' ]]; then
                 echo "- 已编译luci-app-dockerman" >> release.txt
