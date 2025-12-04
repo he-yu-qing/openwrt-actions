@@ -5,7 +5,7 @@
 #
 # https://github.com/P3TERX/Actions-OpenWrt
 # Description: Build OpenWrt using GitHub Actions
-#
+#28是最优化的配置，按指定的版本来编译
 ###############手动修改##############
 name: new16
 
