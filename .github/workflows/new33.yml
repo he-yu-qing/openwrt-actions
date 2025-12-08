@@ -139,20 +139,20 @@ jobs:
     # ===================== 新增：修复warp驱动wed.c错误 =====================
     #- name: 修复warp驱动wed.c类型转换错误
      # run: |
-        cd openwrt
+       # cd openwrt
         # 源码中wed.c的真实路径（非build_dir临时目录）
-        WED_FILE="package/mtk/drivers/warp/src/wed.c"
+       # WED_FILE="package/mtk/drivers/warp/src/wed.c"
         # 检查文件是否存在（防止源码结构变更）
-        if [ ! -f "$WED_FILE" ]; then
-          echo "错误：未找到目标文件 $WED_FILE，请确认源码路径是否正确！"
-          exit 1
-        fi
+       # if [ ! -f "$WED_FILE" ]; then
+         # echo "错误：未找到目标文件 $WED_FILE，请确认源码路径是否正确！"
+        #  exit 1
+       # fi
         # 替换第911行：移除(unsigned long)强制转换
         # sed语法：1. 定位第911行；2. 匹配原代码（转义括号）；3. 替换为新代码
-        sed -i '911s/buf_free_task\(\(unsigned long\)wed\);/buf_free_task(wed);/' "$WED_FILE"
+       # sed -i '911s/buf_free_task\(\(unsigned long\)wed\);/buf_free_task(wed);/' "$WED_FILE"
         # 验证修改结果（输出第911行确认）
-        echo "✅ 已修复wed.c第911行，修改后内容："
-        sed -n '911p' "$WED_FILE"  # 打印第911行，确认修改生效
+       # echo "✅ 已修复wed.c第911行，修改后内容："
+       # sed -n '911p' "$WED_FILE"  # 打印第911行，确认修改生效
     # =====================================================================
 
     - name: 加载config & DIY_P2_SH
