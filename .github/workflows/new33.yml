@@ -137,8 +137,8 @@ jobs:
         grep -A3 "MESON_ARGS += \$(COMP_ARGS) -Dxattr=true -Db_lto=true -Dnls=\$(if \$(CONFIG_BUILD_NLS),en,dis)abled" "$GLIB2_MAKEFILE"
         
     # ===================== 新增：修复warp驱动wed.c错误 =====================
-    - name: 修复warp驱动wed.c类型转换错误
-      run: |
+    #- name: 修复warp驱动wed.c类型转换错误
+     # run: |
         cd openwrt
         # 源码中wed.c的真实路径（非build_dir临时目录）
         WED_FILE="package/mtk/drivers/warp/src/wed.c"
