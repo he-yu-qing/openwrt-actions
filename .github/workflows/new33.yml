@@ -141,10 +141,10 @@ jobs:
       run: |
         cd openwrt
         # 源码中wed.c的真实路径（非build_dir临时目录）
-        WED_FILE="package/mtk/drivers/warp/wed.c"
+        WED_FILE="package/mtk/drivers/warp/src/wed.c"
         # 检查文件是否存在（防止源码结构变更）
         if [ ! -f "$WED_FILE" ]; then
-          echo "❌ 错误：未找到目标文件 $WED_FILE，请确认源码路径是否正确！"
+          echo "错误：未找到目标文件 $WED_FILE，请确认源码路径是否正确！"
           exit 1
         fi
         # 替换第911行：移除(unsigned long)强制转换
