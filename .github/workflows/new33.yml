@@ -103,7 +103,7 @@ jobs:
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         cd openwrt
-        git checkout 2cf4695e63dee915edc46dee0b4cef729e352b0e
+        git pull
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
     - name: 加载feeds.conf.default & DIY_P1_SH
