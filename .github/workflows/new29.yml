@@ -82,6 +82,21 @@ jobs:
         large-packages: true
         swap-storage: true
 
+    - name: 创建SWAP交换分区（缓解内存不足）
+      run: |
+        # 创建8GB SWAP文件（根据需求可调整，建议8-16GB）
+        sudo fallocate -l 8G /swapfile
+        # 设置swap文件权限（仅root可访问）
+        sudo chmod 600 /swapfile
+        # 格式化swap文件
+        sudo mkswap /swapfile
+        # 启用swap
+        sudo swapon /swapfile
+        # 验证swap是否生效
+        swapon --show
+        # 查看内存+swap总容量
+        free -h
+        
     - name: 下载固件源码
       working-directory: /workdir
       run: |
