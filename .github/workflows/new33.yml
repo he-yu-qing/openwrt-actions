@@ -120,21 +120,21 @@ jobs:
         ./scripts/feeds install -a
 
     # ===================== 新增：修改glib2的Makefile =====================
-    - name: 定制glib2 Makefile（添加CFLAGS）
-      run: |
-        cd openwrt
+    #- name: 定制glib2 Makefile（添加CFLAGS）
+      #run: |
+        #cd openwrt
         # 定义glib2 Makefile路径
-        GLIB2_MAKEFILE="feeds/packages/libs/glib2/Makefile"
+       # GLIB2_MAKEFILE="feeds/packages/libs/glib2/Makefile"
         # 检查文件是否存在（防止feeds未安装成功）
-        if [ ! -f "$GLIB2_MAKEFILE" ]; then
-          echo "错误：未找到glib2 Makefile文件，请检查feeds安装！"
-          exit 1
-        fi
+       # if [ ! -f "$GLIB2_MAKEFILE" ]; then
+         # echo "错误：未找到glib2 Makefile文件，请检查feeds安装！"
+         # exit 1
+      #  fi
         # 在指定行后添加TARGET_CFLAGS（sed的a命令表示追加）
-        sed -i '/MESON_ARGS += $(COMP_ARGS) -Dxattr=true -Db_lto=true -Dnls=$(if $(CONFIG_BUILD_NLS),en,dis)abled/a TARGET_CFLAGS += -Wno-error=format-nonliteral' "$GLIB2_MAKEFILE"
+       # sed -i '/MESON_ARGS += $(COMP_ARGS) -Dxattr=true -Db_lto=true -Dnls=$(if $(CONFIG_BUILD_NLS),en,dis)abled/a TARGET_CFLAGS += -Wno-error=format-nonliteral' "$GLIB2_MAKEFILE"
         # 可选：验证修改结果（方便调试）
-        echo "✅ 已修改glib2 Makefile，关键内容验证："
-        grep -A3 "MESON_ARGS += \$(COMP_ARGS) -Dxattr=true -Db_lto=true -Dnls=\$(if \$(CONFIG_BUILD_NLS),en,dis)abled" "$GLIB2_MAKEFILE"
+        #echo "✅ 已修改glib2 Makefile，关键内容验证："
+        #grep -A3 "MESON_ARGS += \$(COMP_ARGS) -Dxattr=true -Db_lto=true -Dnls=\$(if \$(CONFIG_BUILD_NLS),en,dis)abled" "$GLIB2_MAKEFILE"
         
     # ===================== 新增：修复warp驱动wed.c错误 =====================
     #- name: 修复warp驱动wed.c类型转换错误
