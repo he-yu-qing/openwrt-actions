@@ -7,7 +7,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 ###############手动修改##############
-name: new36-ax60006.6
+name: new35-ax60006.6
 
 on:
   repository_dispatch:
@@ -32,7 +32,7 @@ on:
 env:
   ###############手动修改##############
   OPENWRT_NAME: JDC-AX6000-6.6
-  REPO_URL: https://github.com/he-yu-qing/237immortalwrt-mt798x-6.6
+  REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-6.6
   REPO_BRANCH: openwrt-24.10-6.6
   FEEDS_CONF: jdc-ax6000/feeds.conf.default
   CONFIG_FILE: jdc-ax6000/new36.config
@@ -45,7 +45,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
 
     permissions:
       contents: write
@@ -202,7 +202,7 @@ jobs:
       run: |
         cd openwrt
         echo -e "$(nproc) thread compile"
-        make -j$((nproc + 1)) || make -j$(nproc) || make -j$(nproc) V=s
+        make -j$(nproc) || make -j1 || make -j1 V=s
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=$(cat DEVICE_NAME)" >> $GITHUB_ENV
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*TARGET_.*_(.*)_DEVICE_.*=y/\1/' > TARGET_NAME
