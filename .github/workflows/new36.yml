@@ -7,40 +7,151 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 ###############手动修改##############
-name: new36-ax60006.6
+name: new35-ax60006.6
 
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      LAN_IP:
+        description: 'Set LAN IP Address'
+        required: true
+        default: '192.168.123.1'
+      NO_DOCKERMAN:
+        description: 'Not build luci-app-dockerman'
+        required: true
+        default: false
+        type: boolean
+      ssh:
+        description: 'SSH connection to Actions'
+        required: false
+        default: 'false'
 #  schedule:
 #    - cron: 0 16 * * *
 
-
+env:
+  ###############手动修改##############
+  OPENWRT_NAME: JDC-AX6000-6.6
+  REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-6.6
+  REPO_BRANCH: openwrt-24.10-6.6
+  FEEDS_CONF: jdc-ax6000/feeds.conf.default
+  CONFIG_FILE: jdc-ax6000/new36.config
+  DIY_P1_SH: jdc-ax6000/diy-part1.sh
+  DIY_P2_SH: jdc-ax6000/diy-part2.sh
+  SSH_ACTIONS: false
+  UPLOAD_FIRMWARE: true
+  UPLOAD_RELEASE: true
+  TZ: Asia/Shanghai
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     permissions:
       contents: write
 
-    # ===================== 核心修改：修复wed.c第911行 =====================
-    - name: 修复warp驱动wed.c类型转换错误
+    steps:
+    - name: 检查项目分支
+      uses: actions/checkout@main
+
+    - name: 初始化编译环境
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        sudo -E apt-get -qq update
+        sudo -E apt-get -qq install $(curl -fsSL git.io/depends-ubuntu-2004)
+        sudo -E apt-get -qq autoremove --purge
+        sudo -E apt-get -qq clean
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /workdir
+        sudo chown $USER:$GROUPS /workdir
+
+    - name: 快速清理磁盘空间
+      uses: docker/setup-buildx-action@v3
+      with:
+        install: true
+    - name: 腾出空间 (Shell版)
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force
+        sudo -E apt-get -qq autoremove --purge
+        sudo -E apt-get -qq clean
+
+    - name: 创建SWAP交换分区（缓解内存不足）
+      run: |
+        # 创建8GB SWAP文件（根据需求可调整，建议8-16GB）
+        sudo fallocate -l 8G /swapfile
+        # 设置swap文件权限（仅root可访问）
+        sudo chmod 600 /swapfile
+        # 格式化swap文件
+        sudo mkswap /swapfile
+        # 启用swap
+        sudo swapon /swapfile
+        # 验证swap是否生效
+        swapon --show
+        # 查看内存+swap总容量
+        free -h
+        
+    - name: 下载固件源码
+      working-directory: /workdir
+      run: |
+        df -hT $PWD
+        git clone $REPO_URL -b $REPO_BRANCH openwrt
+        cd openwrt
+        git pull
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+    - name: 加载feeds.conf.default & DIY_P1_SH
+      run: |
+        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
+        chmod +x $DIY_P1_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P1_SH
+
+    - name: 更新 & 安装 feeds
       run: |
         cd openwrt
-        # 【关键】确认wed.c的源码路径（根据你的源码结构调整）
-        WED_FILE="package/mtk/drivers/warp/src/wed.c"
-        # 1. 检查文件是否存在，防止路径错误导致编译失败
-        if [ ! -f "$WED_FILE" ]; then
-          echo "❌ 错误：未找到目标文件 $WED_FILE，请确认源码路径！"
-          # 打印目录结构，帮助排查路径
-          ls -l package/mtk/drivers/warp/src/ || true
-          exit 1
-        fi
-        # 2. 精准替换第911行：移除(unsigned long)强制转换（兼容空格）
-        sed -i '911s/buf_free_task\s*(\s*(unsigned long)\s*wed\s*);/buf_free_task(wed);/' "$WED_FILE"
-        # 3. 验证修改结果，打印第911行确认
-        echo "✅ 已修改wed.c第911行，修改后内容："
-        sed -n '911p' "$WED_FILE"
-        # 可选：打印前后几行，确认上下文正确
-        # sed -n '909,913p' "$WED_FILE"
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    # ===================== 新增：修改glib2的Makefile =====================
+    #- name: 定制glib2 Makefile（添加CFLAGS）
+      #run: |
+        #cd openwrt
+        # 定义glib2 Makefile路径
+       # GLIB2_MAKEFILE="feeds/packages/libs/glib2/Makefile"
+        # 检查文件是否存在（防止feeds未安装成功）
+       # if [ ! -f "$GLIB2_MAKEFILE" ]; then
+         # echo "错误：未找到glib2 Makefile文件，请检查feeds安装！"
+         # exit 1
+      #  fi
+        # 在指定行后添加TARGET_CFLAGS（sed的a命令表示追加）
+       # sed -i '/MESON_ARGS += $(COMP_ARGS) -Dxattr=true -Db_lto=true -Dnls=$(if $(CONFIG_BUILD_NLS),en,dis)abled/a TARGET_CFLAGS += -Wno-error=format-nonliteral' "$GLIB2_MAKEFILE"
+        # 可选：验证修改结果（方便调试）
+        #echo "✅ 已修改glib2 Makefile，关键内容验证："
+        #grep -A3 "MESON_ARGS += \$(COMP_ARGS) -Dxattr=true -Db_lto=true -Dnls=\$(if \$(CONFIG_BUILD_NLS),en,dis)abled" "$GLIB2_MAKEFILE"
+        
+    # ===================== 新增：修复warp驱动wed.c错误 =====================
+    #- name: 修复warp驱动wed.c类型转换错误
+     # run: |
+       # cd openwrt
+        # 源码中wed.c的真实路径（非build_dir临时目录）
+       # WED_FILE="package/mtk/drivers/warp/src/wed.c"
+        # 检查文件是否存在（防止源码结构变更）
+       # if [ ! -f "$WED_FILE" ]; then
+         # echo "错误：未找到目标文件 $WED_FILE，请确认源码路径是否正确！"
+        #  exit 1
+       # fi
+        # 替换第911行：移除(unsigned long)强制转换
+        # sed语法：1. 定位第911行；2. 匹配原代码（转义括号）；3. 替换为新代码
+       # sed -i '911s/buf_free_task\(\(unsigned long\)wed\);/buf_free_task(wed);/' "$WED_FILE"
+        # 验证修改结果（输出第911行确认）
+       # echo "✅ 已修复wed.c第911行，修改后内容："
+       # sed -n '911p' "$WED_FILE"  # 打印第911行，确认修改生效
     # =====================================================================
 
     - name: 加载config & DIY_P2_SH
@@ -55,7 +166,9 @@ jobs:
         cd openwrt
         SET_IP=${{ github.event.inputs.LAN_IP }}
         if [[ $SET_IP =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; then
+            #修改immortalwrt.lan关联IP
             sed -i "s/192\.168\.[0-9]*\.[0-9]*/$SET_IP/g" $(find feeds/luci/modules/luci-mod-system -type f -name "flash.js")
+            #修改默认IP地址
             sed -i "s/192\.168\.[0-9]*\.[0-9]*/$SET_IP/g" package/base-files/files/bin/config_generate
             echo "Set LAN IP Address: $SET_IP"
         else
@@ -84,26 +197,12 @@ jobs:
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
 
-    # ===================== 编译固件（新增失败后单独编译warp驱动） =====================
     - name: 编译固件
       id: compile
       run: |
         cd openwrt
         echo -e "$(nproc) thread compile"
-        
-        # 尝试正常编译
-        if ! make -j$(nproc); then
-          echo "❌ 常规编译失败，尝试单独编译 warp 驱动排查错误"
-          # 清理 warp 驱动编译缓存
-          make package/mtk/drivers/warp/clean V=s
-          # 单独编译 warp 驱动，输出详细日志
-          make package/mtk/drivers/warp/compile V=s 2>&1 | tee warp_compile.log
-          # 尝试重新全量编译（单线程）
-          echo "🔄 重新尝试单线程全量编译"
-          make -j1 V=s
-        fi
-        
-        # 生成设备/IP等环境变量（原有核心逻辑）
+        make -j$(nproc) || make -j1 || make -j1 V=s
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=$(cat DEVICE_NAME)" >> $GITHUB_ENV
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*TARGET_.*_(.*)_DEVICE_.*=y/\1/' > TARGET_NAME
