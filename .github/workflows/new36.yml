@@ -29,32 +29,80 @@ on:
 #  schedule:
 #    - cron: 0 16 * * *
 
+
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    permissions:
+      contents: write
+
     # ===================== 核心修改：修复wed.c第911行 =====================
-  - name: 修复warp驱动wed.c类型转换错误
-       run: |
+    - name: 修复warp驱动wed.c类型转换错误
+      run: |
         cd openwrt
-        # 【关键】确认wed.c的源码路径（根据你的源码结构调整，以下是通用路径）
+        # 【关键】确认wed.c的源码路径（根据你的源码结构调整）
         WED_FILE="package/mtk/drivers/warp/src/wed.c"
         # 1. 检查文件是否存在，防止路径错误导致编译失败
         if [ ! -f "$WED_FILE" ]; then
           echo "❌ 错误：未找到目标文件 $WED_FILE，请确认源码路径！"
-          # 可选：打印目录结构，帮助排查路径
+          # 打印目录结构，帮助排查路径
           ls -l package/mtk/drivers/warp/src/ || true
           exit 1
         fi
-        # 2. 精准替换第911行：移除(unsigned long)强制转换
-        # sed语法说明：
-        # 911s：定位第911行
-        # 原内容：buf_free_task((unsigned long)wed);
-        # 新内容：buf_free_task(wed);
-        # 转义括号：\( 和 \) 是sed中匹配括号的转义符
-        sed -i '911s/buf_free_task\(\(unsigned long\)wed\);/buf_free_task(wed);/' "$WED_FILE"
+        # 2. 精准替换第911行：移除(unsigned long)强制转换（兼容空格）
+        sed -i '911s/buf_free_task\s*(\s*(unsigned long)\s*wed\s*);/buf_free_task(wed);/' "$WED_FILE"
         # 3. 验证修改结果，打印第911行确认
         echo "✅ 已修改wed.c第911行，修改后内容："
         sed -n '911p' "$WED_FILE"
         # 可选：打印前后几行，确认上下文正确
         # sed -n '909,913p' "$WED_FILE"
-  - name: 编译固件
+    # =====================================================================
+
+    - name: 加载config & DIY_P2_SH
+      run: |
+        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+        chmod +x $DIY_P2_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P2_SH
+
+    - name: 设置LAN IP地址（路由器登录地址）
+      run: |
+        cd openwrt
+        SET_IP=${{ github.event.inputs.LAN_IP }}
+        if [[ $SET_IP =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; then
+            sed -i "s/192\.168\.[0-9]*\.[0-9]*/$SET_IP/g" $(find feeds/luci/modules/luci-mod-system -type f -name "flash.js")
+            sed -i "s/192\.168\.[0-9]*\.[0-9]*/$SET_IP/g" package/base-files/files/bin/config_generate
+            echo "Set LAN IP Address: $SET_IP"
+        else
+            echo "Invalid IP address, use default."
+        fi
+
+    - name: 取消编译dockerman
+      if: github.event.inputs.NO_DOCKERMAN == 'true'
+      run: |
+        cd openwrt
+        sed -i '/CONFIG_PACKAGE_luci-app-dockerman=y/d' .config
+
+    - name: SSH链接管理
+      uses: P3TERX/ssh2actions@v1.0.0
+      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
+      env:
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
+    - name: 下载安装包
+      id: package
+      run: |
+        cd openwrt
+        make defconfig
+        make download -j$(nproc)
+        find dl -size -1024c -exec ls -l {} \;
+        find dl -size -1024c -exec rm -f {} \;
+
+    # ===================== 编译固件（新增失败后单独编译warp驱动） =====================
+    - name: 编译固件
       id: compile
       run: |
         cd openwrt
@@ -62,9 +110,78 @@ on:
         
         # 尝试正常编译
         if ! make -j$(nproc); then
-          echo "编译失败，尝试重新编译出错的包: package/mtk/drivers/warp"
-          
-          # 方法1：先清理并单独编译出错的包，输出详细日志
-          echo "=== 开始单独编译 package/mtk/drivers/warp ==="
+          echo "❌ 常规编译失败，尝试单独编译 warp 驱动排查错误"
+          # 清理 warp 驱动编译缓存
           make package/mtk/drivers/warp/clean V=s
+          # 单独编译 warp 驱动，输出详细日志
           make package/mtk/drivers/warp/compile V=s 2>&1 | tee warp_compile.log
+          # 尝试重新全量编译（单线程）
+          echo "🔄 重新尝试单线程全量编译"
+          make -j1 V=s
+        fi
+        
+        # 生成设备/IP等环境变量（原有核心逻辑）
+        grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
+        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=$(cat DEVICE_NAME)" >> $GITHUB_ENV
+        grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*TARGET_.*_(.*)_DEVICE_.*=y/\1/' > TARGET_NAME
+        [ -s TARGET_NAME ] && echo "TARGET_NAME=$(cat TARGET_NAME)" >> $GITHUB_ENV
+        sed -n 's/.*lan) ipad=${ipaddr:-"\([0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+\)"} ;;.*/\1/p' package/base-files/files/bin/config_generate | head -n 1 > IP_ADDR
+        [ -s IP_ADDR ] && echo "IP_ADDR=$(cat IP_ADDR)" >> $GITHUB_ENV
+        if grep -q 'CONFIG_PACKAGE_luci-app-dockerman=y' .config; then
+                echo "BUILD_DOCKERMAN=-docker" >> $GITHUB_ENV
+        else
+                echo "BUILD_DOCKERMAN=" >> $GITHUB_ENV
+        fi
+        echo "FILE_DATE=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_ENV
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - name: 查看磁盘使用情况
+      if: (!cancelled())
+      run: df -hT
+
+    - name: 整理文件并重命名
+      id: organize
+      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+      run: | 
+        cd openwrt/bin/targets/*/*
+        rm -rf packages
+        find ./ -iregex ".*\(bl31-uboot.fip\|gpt.bin\|preloader.bin\|bl2.bin\)$" -exec rm -rf {} +
+        sudo -E apt-get -qq install rename
+        rename 's/.*${{ env.DEVICE_NAME }}/${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}/' *
+        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - name: 打包上传固件到Actions Artifacts
+      uses: actions/upload-artifact@main
+      if: steps.organize.outputs.status == 'success' && !cancelled()
+      with:
+        name: ${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}
+        path: ${{ env.FIRMWARE }}
+
+    - name: 生成固件Release标签
+      id: tag
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      run: |
+        touch release.txt
+        echo "- 使用源码：${{ env.REPO_URL }}" >> release.txt
+        echo "- 使用分支：${{ env.REPO_BRANCH }}" >> release.txt
+        echo "- 使用Commit：f712cc381b2364560617e4ad7d31e28a8efb61cd" >> release.txt
+        echo "- 登录地址：${{ env.IP_ADDR }}" >> release.txt
+        if [[ "${{ env.BUILD_DOCKERMAN }}" == '-docker' ]]; then
+                echo "- 已编译luci-app-dockerman" >> release.txt
+        else
+                echo "- 未编译luci-app-dockerman" >> release.txt
+        fi
+        echo "release_tag=${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}" >> $GITHUB_OUTPUT
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - name: 发布固件至Release
+      uses: softprops/action-gh-release@v2.1.0
+      if: steps.tag.outputs.status == 'success' && !cancelled()
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        files: ${{ env.FIRMWARE }}/*
+        name: ${{ env.FILE_DATE }}-${{ env.DEVICE_NAME }}
+        tag_name: ${{ steps.tag.outputs.release_tag }}
+        body_path: release.txt
