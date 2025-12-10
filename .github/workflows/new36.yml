@@ -9,23 +9,6 @@
 ###############手动修改##############
 name: new36-ax60006.6
 
-on:
-  repository_dispatch:
-  workflow_dispatch:
-    inputs:
-      LAN_IP:
-        description: 'Set LAN IP Address'
-        required: true
-        default: '192.168.123.1'
-      NO_DOCKERMAN:
-        description: 'Not build luci-app-dockerman'
-        required: true
-        default: false
-        type: boolean
-      ssh:
-        description: 'SSH connection to Actions'
-        required: false
-        default: 'false'
 #  schedule:
 #    - cron: 0 16 * * *
 
