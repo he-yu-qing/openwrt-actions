@@ -2,6 +2,11 @@
 # Automatically generated file; DO NOT EDIT.
 # ImmortalWrt Configuration
 #
+# 自定义
+CONFIG_KERNEL_CGROUP_RDMA=n
+CONFIG_KERNEL_MEMCG=n
+CONFIG_KERNEL_MEMCG_KMEM=n
+ #
 CONFIG_MODULES=y
 CONFIG_HAVE_DOT_CONFIG=y
 CONFIG_HOST_OS_LINUX=y
