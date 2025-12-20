@@ -1,0 +1,191 @@
+name: 2512
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      LAN_IP:
+        description: 'Set LAN IP Address'
+        required: true
+        default: '192.168.123.1'
+      NO_DOCKERMAN:
+        description: 'Not build luci-app-dockerman'
+        required: true
+        default: false
+        type: boolean
+      INCREMENTAL_BUILD:
+        description: 'Enable incremental build (use cache)'
+        required: false
+        default: false
+        type: boolean
+      ssh:
+        description: 'SSH connection to Actions'
+        required: false
+        default: 'false'
+
+env:
+  OPENWRT_NAME: JDC-AX6000-6.6
+  REPO_URL: https://github.com/he-yu-qing/2512immortalwrt-mt798x
+  REPO_BRANCH: 25.12-dev
+  FEEDS_CONF: 2512-612/feeds.conf.default
+  CONFIG_FILE: 2512-612/new.config
+  DIY_P1_SH: jdc-ax6000/diy-part1.sh
+  DIY_P2_SH: jdc-ax6000/diy-part2.sh
+  SSH_ACTIONS: false
+  UPLOAD_FIRMWARE: true
+  UPLOAD_RELEASE: true
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    permissions:
+      contents: write
+
+    steps:
+    - name: 检查项目分支
+      uses: actions/checkout@main
+
+    - name: 设置缓存key
+      id: cache-key
+      run: |
+        # 生成缓存key，基于源码commit和配置文件
+        if [[ ${{ github.event.inputs.INCREMENTAL_BUILD }} == 'true' ]]; then
+          echo "启用增量编译缓存"
+          echo "CACHE_KEY=openwrt-cache-${{ github.sha }}-$(date +%Y%m%d)" >> $GITHUB_ENV
+        else
+          echo "全新编译，不使用缓存"
+          echo "CACHE_KEY=openwrt-cache-${{ github.sha }}-$(date +%s)" >> $GITHUB_ENV
+        fi
+
+    - name: 恢复编译缓存
+      if: github.event.inputs.INCREMENTAL_BUILD == 'true'
+      uses: actions/cache@v3
+      with:
+        path: |
+          /workdir/openwrt/dl
+          /workdir/openwrt/build_dir
+          /workdir/openwrt/staging_dir
+          /workdir/openwrt/.config
+        key: ${{ env.CACHE_KEY }}
+        restore-keys: |
+          openwrt-cache-
+
+    - name: 初始化编译环境
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        # 只安装必要的包，不清理已有数据
+        sudo -E apt-get -qq update
+        # 检查并安装缺失的包
+        sudo -E apt-get -qq install $(curl -fsSL git.io/depends-ubuntu-2004) || true
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /workdir
+        sudo chown $USER:$GROUPS /workdir
+   
+    - name: 更新或下载固件源码
+      id: source_manage
+      working-directory: /workdir
+      run: |
+        echo "当前工作目录: /workdir"
+        
+        if [[ ${{ github.event.inputs.INCREMENTAL_BUILD }} == 'true' ]] && [ -d "openwrt/.git" ]; then
+          echo "=== 增量编译模式 ==="
+          cd openwrt
+          echo "拉取最新代码..."
+          git fetch origin
+          git reset --hard origin/$REPO_BRANCH
+          echo "源码更新完成"
+          echo "BUILD_MODE=incremental" >> $GITHUB_ENV
+        else
+          echo "=== 全新编译模式 ==="
+          rm -rf openwrt
+          git clone $REPO_URL -b $REPO_BRANCH openwrt
+          echo "BUILD_MODE=full" >> $GITHUB_ENV
+        fi
+        
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+    - name: 加载feeds.conf.default & DIY_P1_SH
+      run: |
+        if [ -e $FEEDS_CONF ]; then
+          echo "复制feeds.conf.default..."
+          cp $FEEDS_CONF openwrt/feeds.conf.default
+        fi
+        
+        if [ -e $DIY_P1_SH ]; then
+          chmod +x $DIY_P1_SH
+          cd openwrt
+          if [[ ${{ env.BUILD_MODE }} == 'full' ]]; then
+            $GITHUB_WORKSPACE/$DIY_P1_SH
+          else
+            echo "增量编译，跳过diy-part1.sh"
+          fi
+        fi
+
+    - name: 更新 & 安装 feeds
+      run: |
+        cd openwrt
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    - name: 加载config & DIY_P2_SH
+      run: |
+        if [ -e $CONFIG_FILE ]; then
+          echo "复制配置文件..."
+          cp $CONFIG_FILE openwrt/.config
+        fi
+        
+        if [ -e $DIY_P2_SH ]; then
+          chmod +x $DIY_P2_SH
+          cd openwrt
+          $GITHUB_WORKSPACE/$DIY_P2_SH
+        fi
+
+    - name: 设置LAN IP地址
+      run: |
+        cd openwrt
+        SET_IP=${{ github.event.inputs.LAN_IP }}
+        if [[ $SET_IP =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; then
+            sed -i "s/192\.168\.[0-9]*\.[0-9]*/$SET_IP/g" $(find feeds/luci/modules/luci-mod-system -type f -name "flash.js" 2>/dev/null || true)
+            sed -i "s/192\.168\.[0-9]*\.[0-9]*/$SET_IP/g" package/base-files/files/bin/config_generate
+            echo "Set LAN IP Address: $SET_IP"
+        else
+            echo "Invalid IP address, use default."
+        fi
+
+    - name: 取消编译dockerman
+      if: github.event.inputs.NO_DOCKERMAN == 'true'
+      run: |
+        cd openwrt
+        sed -i '/CONFIG_PACKAGE_luci-app-dockerman=y/d' .config
+
+    - name: 下载安装包
+      id: package
+      run: |
+        cd openwrt
+        make defconfig
+        
+        echo "检查缓存状态..."
+        if [[ ${{ env.BUILD_MODE }} == 'incremental' ]] && [ -d "dl" ]; then
+          echo "增量编译，跳过完整下载..."
+          # 只下载可能缺失的包
+          make -j$(nproc) download || make download
+        else
+          echo "全新编译或缓存无效，完整下载..."
+          make download -j$(nproc)
+        fi
+        
+        find dl -size -1024c -exec rm -f {} \;
+
+    - name: 保存编译缓存
+      if: github.event.inputs.INCREMENTAL_BUILD == 'true'
+      uses: actions/cache@v3
+      with:
+        path: |
+          /workdir/openwrt/dl
+          /workdir/openwrt/build_dir
+          /workdir/openwrt/staging_dir
+          /workdir/openwrt/.config
+        key: ${{ env.CACHE_KEY }}
