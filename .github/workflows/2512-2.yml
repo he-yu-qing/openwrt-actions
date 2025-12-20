@@ -7,7 +7,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 ###############手动修改##############
-name: 2512
+name: 2512-2
 
 on:
   repository_dispatch:
