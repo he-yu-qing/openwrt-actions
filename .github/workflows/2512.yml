@@ -5,9 +5,9 @@
 #
 # https://github.com/P3TERX/Actions-OpenWrt
 # Description: Build OpenWrt using GitHub Actions
-#28是最优化的配置，按指定的版本来编译
+#
 ###############手动修改##############
-name: new16
+name: 2512
 
 on:
   repository_dispatch:
@@ -32,10 +32,10 @@ on:
 env:
   ###############手动修改##############
   OPENWRT_NAME: JDC-AX6000-6.6
-  REPO_URL: https://github.com/he-yu-qing/237immortalwrt-mt798x-6.6
+  REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-6.6
   REPO_BRANCH: openwrt-24.10-6.6
   FEEDS_CONF: jdc-ax6000/feeds.conf.default
-  CONFIG_FILE: jdc-ax6000/new29.config
+  CONFIG_FILE: jdc-ax6000/new47.config
   DIY_P1_SH: jdc-ax6000/diy-part1.sh
   DIY_P2_SH: jdc-ax6000/diy-part2.sh
   SSH_ACTIONS: false
@@ -87,11 +87,6 @@ jobs:
       run: |
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
-        cd openwrt
-        # 切换到指定Commit版本
-        git checkout 50f7facf5b8f201d49aebdf60e451865f8c80028
-        # 打印Commit信息，验证切换结果（可选）
-        git log -1 --oneline
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
     - name: 加载feeds.conf.default & DIY_P1_SH
