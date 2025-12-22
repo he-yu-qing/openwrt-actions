@@ -123,6 +123,7 @@ jobs:
       run: |
         cd openwrt
         ./scripts/feeds update -a
+        rm -rf package/feeds/appfilter/oaf package/feeds/appfilter/luci-app-oaf
         ./scripts/feeds install -a -f
 
     - name: 加载config & DIY_P2_SH
