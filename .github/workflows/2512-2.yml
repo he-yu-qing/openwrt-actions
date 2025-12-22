@@ -5,9 +5,8 @@
 #
 # https://github.com/P3TERX/Actions-OpenWrt
 # Description: Build OpenWrt using GitHub Actions
-#
-###############手动修改##############
-name: 2512-2
+
+name: 2512-Enhanced-Space，优化后的
 
 on:
   repository_dispatch:
@@ -22,23 +21,17 @@ on:
         required: true
         default: false
         type: boolean
-      UPDATE_SOURCE_ONLY:
-        description: 'Only update source code, keep all caches (for incremental build)'
-        required: false
-        default: false
-        type: boolean
       ssh:
         description: 'SSH connection to Actions'
         required: false
         default: 'false'
 
 env:
-  ###############手动修改##############
   OPENWRT_NAME: JDC-AX6000-6.6
   REPO_URL: https://github.com/he-yu-qing/2512immortalwrt-mt798x
   REPO_BRANCH: 25.12-dev
   FEEDS_CONF: 2512-612/feeds.conf.default
-  CONFIG_FILE: 2512-612/new.config
+  CONFIG_FILE: 2512-612/new1.config
   DIY_P1_SH: jdc-ax6000/diy-part1.sh
   DIY_P2_SH: jdc-ax6000/diy-part2.sh
   SSH_ACTIONS: false
@@ -49,7 +42,6 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
-
     permissions:
       contents: write
 
@@ -57,99 +49,83 @@ jobs:
     - name: 检查项目分支
       uses: actions/checkout@main
 
+    ### 修改说明：这是解决“No space left”最核心的一步。
+    ### GitHub Actions 默认环境预装了大量我们不需要的工具（如 Android SDK、.NET、CodeQL），
+    ### 这一步可以手动强制删除这些占用了约 20GB+ 空间的文件夹。
+    - name: 极限腾挪磁盘空间 (手动清理)
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo rm -rf /usr/local/share/boost
+        sudo rm -rf /usr/lib/jvm
+        sudo docker image prune -a -f
+        sudo apt-get update
+        sudo apt-get -y purge azure-cli* docker* ghc* google* llvm* mono* mysql* php* zulu*
+        sudo apt-get -y autoremove --purge
+        sudo apt-get clean
+        df -h
+
+    ### 修改说明：保留此插件作为二次清理，并开启 docker-images 清理。
+    ### 配合上面的手动清理，可以确保可用空间达到 30GB 以上。
+    - name: 极限腾挪磁盘空间 (插件清理)
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: true
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        swap-storage: true
+        docker-images: true
+
     - name: 初始化编译环境
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        ### 修改说明：针对 Ubuntu 22.04 使用对应的依赖安装脚本
         sudo -E apt-get -qq update
-        sudo -E apt-get -qq install $(curl -fsSL git.io/depends-ubuntu-2004)
+        sudo -E apt-get -qq install $(curl -fsSL git.io/depends-ubuntu-2204)
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
-   
-    - name: 更新或下载固件源码
-      id: source_manage
+
+    - name: 下载固件源码
       working-directory: /workdir
       run: |
         df -hT $PWD
-        echo "当前目录内容:"
-        ls -la /workdir/
-        
-        if [[ ${{ github.event.inputs.UPDATE_SOURCE_ONLY }} == 'true' ]] && [ -d "openwrt/.git" ]; then
-          echo "=== 增量编译模式 ==="
-          echo "仅更新源码，保留所有缓存..."
-          cd openwrt
-          echo "当前git状态:"
-          git status --short
-          echo "拉取最新代码..."
-          git fetch origin
-          git reset --hard origin/$REPO_BRANCH
-          echo "源码更新完成"
-          echo "UPDATE_MODE=incremental" >> $GITHUB_ENV
-        else
-          echo "=== 全新编译模式 ==="
-          echo "重新下载源码..."
-          rm -rf openwrt
-          git clone $REPO_URL -b $REPO_BRANCH openwrt
-          echo "UPDATE_MODE=full" >> $GITHUB_ENV
-        fi
-        
-        # 创建符号链接
+        git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-        echo "工作区链接已创建"
 
     - name: 加载feeds.conf.default & DIY_P1_SH
       run: |
-        if [ -e $FEEDS_CONF ]; then
-          echo "复制feeds.conf.default..."
-          cp $FEEDS_CONF openwrt/feeds.conf.default
-        fi
-        
-        if [ -e $DIY_P1_SH ]; then
-          echo "运行diy-part1.sh..."
-          chmod +x $DIY_P1_SH
-          cd openwrt
-          # 只有全新编译时才运行diy-part1.sh，因为增量编译时feeds.conf可能已存在
-          if [[ ${{ env.UPDATE_MODE }} == 'full' ]]; then
-            $GITHUB_WORKSPACE/$DIY_P1_SH
-          else
-            echo "增量编译，跳过diy-part1.sh (已存在feeds.conf.default)"
-          fi
-        fi
+        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
+        chmod +x $DIY_P1_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P1_SH
 
     - name: 更新 & 安装 feeds
       run: |
         cd openwrt
-        echo "更新feeds..."
         ./scripts/feeds update -a
-        echo "安装feeds..."
         ./scripts/feeds install -a
 
     - name: 加载config & DIY_P2_SH
       run: |
-        if [ -e $CONFIG_FILE ]; then
-          echo "复制配置文件..."
-          cp $CONFIG_FILE openwrt/.config
-        fi
-        
-        if [ -e $DIY_P2_SH ]; then
-          echo "运行diy-part2.sh..."
-          chmod +x $DIY_P2_SH
-          cd openwrt
-          $GITHUB_WORKSPACE/$DIY_P2_SH
-        fi
+        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+        chmod +x $DIY_P2_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P2_SH
 
-    - name: 设置LAN IP地址（路由器登录地址）
+    - name: 设置LAN IP地址
       run: |
         cd openwrt
         SET_IP=${{ github.event.inputs.LAN_IP }}
         if [[ $SET_IP =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; then
-            #修改immortalwrt.lan关联IP
             sed -i "s/192\.168\.[0-9]*\.[0-9]*/$SET_IP/g" $(find feeds/luci/modules/luci-mod-system -type f -name "flash.js")
-            #修改默认IP地址
             sed -i "s/192\.168\.[0-9]*\.[0-9]*/$SET_IP/g" package/base-files/files/bin/config_generate
             echo "Set LAN IP Address: $SET_IP"
         else
@@ -165,32 +141,15 @@ jobs:
     - name: SSH链接管理
       uses: P3TERX/ssh2actions@v1.0.0
       if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
-      env:
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-    - name: 检查并下载缺失的安装包
+    - name: 下载安装包
       id: package
       run: |
         cd openwrt
         make defconfig
-        
-        # 检查dl目录内容
-        echo "=== 当前下载缓存 ==="
-        if [ -d "dl" ]; then
-          echo "dl目录大小:"
-          du -sh dl
-          echo "文件数量:"
-          find dl -type f | wc -l
-        else
-          echo "dl目录不存在"
-        fi
-        
-        # 仅下载缺失的包
-        echo "开始下载缺失的包..."
+        ### 修改说明：下载前检查一次空间，预防万一
+        df -h
         make download -j$(nproc)
-        
-        # 清理无效的小文件
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
 
@@ -199,6 +158,8 @@ jobs:
       run: |
         cd openwrt
         echo -e "$(nproc) thread compile"
+        ### 修改说明：如果 make -j$(nproc) 失败，通常是因为内存或临时空间溢出
+        ### 失败后会自动切换到单线程编译以便排查错误，且单线程占用磁盘峰值较低
         make -j$(nproc) || make -j1 || make -j1 V=s
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=$(cat DEVICE_NAME)" >> $GITHUB_ENV
@@ -214,7 +175,8 @@ jobs:
         echo "FILE_DATE=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
-    - name: 查看磁盘使用情况
+    ### 修改说明：编译完成后立即查看空间，方便分析整个过程消耗了多少空间
+    - name: 查看编译后磁盘使用情况
       if: (!cancelled())
       run: df -hT
 
@@ -226,7 +188,7 @@ jobs:
         rm -rf packages
         find ./ -iregex ".*\(bl31-uboot.fip\|gpt.bin\|preloader.bin\|bl2.bin\)$" -exec rm -rf {} +
         sudo -E apt-get -qq install rename
-        rename 's/.*${{ env.DEVICE_NAME }}/${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}/' *
+        rename "s/.*${{ env.DEVICE_NAME }}/${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}/" *
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
@@ -244,13 +206,7 @@ jobs:
         touch release.txt
         echo "- 使用源码：${{ env.REPO_URL }}" >> release.txt
         echo "- 使用分支：${{ env.REPO_BRANCH }}" >> release.txt
-        echo "- 使用Commit：f712cc381b2364560617e4ad7d31e28a8efb61cd" >> release.txt
         echo "- 登录地址：${{ env.IP_ADDR }}" >> release.txt
-        if [[ "${{ env.BUILD_DOCKERMAN }}" == '-docker' ]]; then
-                echo "- 已编译luci-app-dockerman" >> release.txt
-        else
-                echo "- 未编译luci-app-dockerman" >> release.txt
-        fi
         echo "release_tag=${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}" >> $GITHUB_OUTPUT
         echo "status=success" >> $GITHUB_OUTPUT
 
