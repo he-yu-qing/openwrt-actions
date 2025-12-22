@@ -73,6 +73,40 @@ jobs:
         swap-storage: true
         docker-images: true
 
+    - name: 初始化缓存变量
+      run: |
+        echo "CACHE_PREFIX=${{ runner.os }}-openwrt-${{ env.REPO_BRANCH }}" >> $GITHUB_ENV
+        echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> $GITHUB_ENV
+
+    # 【新增：缓存 dl 文件夹】
+    - name: 缓存下载包 (dl)
+      uses: actions/cache@v4
+      with:
+        path: openwrt/dl
+        key: ${{ env.CACHE_PREFIX }}-dl-${{ hashFiles('**/feeds.conf.default') }}-${{ hashFiles('**/*.config') }}
+        restore-keys: |
+          ${{ env.CACHE_PREFIX }}-dl-
+
+    # 【新增：缓存工具链 (Toolchain)】
+    - name: 缓存工具链 (Toolchain)
+      uses: actions/cache@v4
+      with:
+        path: |
+          openwrt/staging_dir/host
+          openwrt/staging_dir/toolchain-*
+        key: ${{ env.CACHE_PREFIX }}-toolchain-${{ hashFiles('**/feeds.conf.default') }}-${{ hashFiles('**/*.config') }}
+        restore-keys: |
+          ${{ env.CACHE_PREFIX }}-toolchain-
+
+    # 【新增：缓存 CCACHE】
+    - name: 缓存 CCACHE
+      uses: actions/cache@v4
+      with:
+        path: .ccache
+        key: ${{ env.CACHE_PREFIX }}-ccache-${{ date }}
+        restore-keys: |
+          ${{ env.CACHE_PREFIX }}-ccache-
+
     - name: 下载固件源码
       working-directory: /workdir
       run: |
