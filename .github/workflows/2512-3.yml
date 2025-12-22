@@ -5,8 +5,7 @@
 #
 # https://github.com/P3TERX/Actions-OpenWrt
 # Description: Build OpenWrt using GitHub Actions
-#
-###############手动修改##############
+
 name: 2512
 
 on:
@@ -26,11 +25,8 @@ on:
         description: 'SSH connection to Actions'
         required: false
         default: 'false'
-#  schedule:
-#    - cron: 0 16 * * *
 
 env:
-  ###############手动修改##############
   OPENWRT_NAME: JDC-AX6000-6.6
   REPO_URL: https://github.com/he-yu-qing/2512immortalwrt-mt798x
   REPO_BRANCH: 25.12-dev
@@ -46,13 +42,12 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
-
     permissions:
       contents: write
 
     steps:
     - name: 检查项目分支
-      uses: actions/checkout@main
+      uses: actions/checkout@v4
 
     - name: 初始化编译环境
       env:
@@ -60,34 +55,14 @@ jobs:
       run: |
         sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
         sudo -E apt-get -qq update
-        sudo -E apt-get -qq install $(curl -fsSL git.io/depends-ubuntu-2004)
+        sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo u-boot-tools upx-ucl unzip vim wget xmlto xxd zlib1g-dev
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
 
-    ### 修改说明：这是解决“No space left”最核心的一步。
-    ### GitHub Actions 默认环境预装了大量我们不需要的工具（如 Android SDK、.NET、CodeQL），
-    ### 这一步可以手动强制删除这些占用了约 20GB+ 空间的文件夹。
-    - name: 极限腾挪磁盘空间 (手动清理)
-      run: |
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /opt/hostedtoolcache/CodeQL
-        sudo rm -rf /usr/local/share/boost
-        sudo rm -rf /usr/lib/jvm
-        sudo docker image prune -a -f
-        sudo apt-get update
-        sudo apt-get -y purge azure-cli* docker* ghc* google* llvm* mono* mysql* php* zulu*
-        sudo apt-get -y autoremove --purge
-        sudo apt-get clean
-        df -h
-
-    ### 修改说明：保留此插件作为二次清理，并开启 docker-images 清理。
-    ### 配合上面的手动清理，可以确保可用空间达到 30GB 以上。
-    - name: 极限腾挪磁盘空间 (插件清理)
+    - name: 极限腾挪磁盘空间
       uses: jlumbroso/free-disk-space@main
       with:
         tool-cache: true
@@ -97,7 +72,7 @@ jobs:
         large-packages: true
         swap-storage: true
         docker-images: true
-   
+
     - name: 下载固件源码
       working-directory: /workdir
       run: |
@@ -125,18 +100,14 @@ jobs:
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
 
-    - name: 设置LAN IP地址（路由器登录地址）
+    - name: 设置LAN IP地址
       run: |
         cd openwrt
         SET_IP=${{ github.event.inputs.LAN_IP }}
-        if [[ $SET_IP =~ ^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; then
-            #修改immortalwrt.lan关联IP
+        if [[ $SET_IP =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
             sed -i "s/192\.168\.[0-9]*\.[0-9]*/$SET_IP/g" $(find feeds/luci/modules/luci-mod-system -type f -name "flash.js")
-            #修改默认IP地址
             sed -i "s/192\.168\.[0-9]*\.[0-9]*/$SET_IP/g" package/base-files/files/bin/config_generate
             echo "Set LAN IP Address: $SET_IP"
-        else
-            echo "Invalid IP address, use default."
         fi
 
     - name: 取消编译dockerman
@@ -147,7 +118,7 @@ jobs:
 
     - name: SSH链接管理
       uses: P3TERX/ssh2actions@v1.0.0
-      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
+      if: github.event.inputs.ssh == 'true' || contains(github.event.action, 'ssh')
       env:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -174,16 +145,12 @@ jobs:
         sed -n 's/.*lan) ipad=${ipaddr:-"\([0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+\)"} ;;.*/\1/p' package/base-files/files/bin/config_generate | head -n 1 > IP_ADDR
         [ -s IP_ADDR ] && echo "IP_ADDR=$(cat IP_ADDR)" >> $GITHUB_ENV
         if grep -q 'CONFIG_PACKAGE_luci-app-dockerman=y' .config; then
-                echo "BUILD_DOCKERMAN=-docker" >> $GITHUB_ENV
+            echo "BUILD_DOCKERMAN=-docker" >> $GITHUB_ENV
         else
-                echo "BUILD_DOCKERMAN=" >> $GITHUB_ENV
+            echo "BUILD_DOCKERMAN=" >> $GITHUB_ENV
         fi
         echo "FILE_DATE=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
-
-    - name: 查看磁盘使用情况
-      if: (!cancelled())
-      run: df -hT
 
     - name: 整理文件并重命名
       id: organize
@@ -192,13 +159,13 @@ jobs:
         cd openwrt/bin/targets/*/*
         rm -rf packages
         find ./ -iregex ".*\(bl31-uboot.fip\|gpt.bin\|preloader.bin\|bl2.bin\)$" -exec rm -rf {} +
-        sudo -E apt-get -qq install rename
-        rename 's/.*${{ env.DEVICE_NAME }}/${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}/' *
+        sudo apt-get -y install rename
+        rename "s/.*${{ env.DEVICE_NAME }}/${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}/" *
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: 打包上传固件到Actions Artifacts
-      uses: actions/upload-artifact@main
+      uses: actions/upload-artifact@v4
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         name: ${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}
@@ -211,21 +178,14 @@ jobs:
         touch release.txt
         echo "- 使用源码：${{ env.REPO_URL }}" >> release.txt
         echo "- 使用分支：${{ env.REPO_BRANCH }}" >> release.txt
-        echo "- 使用Commit：f712cc381b2364560617e4ad7d31e28a8efb61cd" >> release.txt
         echo "- 登录地址：${{ env.IP_ADDR }}" >> release.txt
-        if [[ "${{ env.BUILD_DOCKERMAN }}" == '-docker' ]]; then
-                echo "- 已编译luci-app-dockerman" >> release.txt
-        else
-                echo "- 未编译luci-app-dockerman" >> release.txt
-        fi
+        [ "${{ env.BUILD_DOCKERMAN }}" == "-docker" ] && echo "- 已编译luci-app-dockerman" >> release.txt || echo "- 未编译luci-app-dockerman" >> release.txt
         echo "release_tag=${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.DEVICE_NAME }}${{ env.BUILD_DOCKERMAN }}" >> $GITHUB_OUTPUT
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: 发布固件至Release
-      uses: softprops/action-gh-release@v2.1.0
+      uses: softprops/action-gh-release@v2
       if: steps.tag.outputs.status == 'success' && !cancelled()
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         files: ${{ env.FIRMWARE }}/*
         name: ${{ env.FILE_DATE }}-${{ env.DEVICE_NAME }}
