@@ -101,7 +101,17 @@ jobs:
         cd openwrt
         ./scripts/feeds update -a
         ./scripts/feeds install -a
-
+    - name: 移除 Luci Makefile 中的 attendedsysupgrade 依赖
+      run: |
+        cd openwrt
+        # 使用 sed 直接从 Makefile 中删除该依赖字符串
+        sed -i 's/+luci-app-attendedsysupgrade//g' feeds/luci/collections/luci/Makefile
+        # 验证修改（可选，会在日志中显示是否还存在该项）
+        if grep -q "luci-app-attendedsysupgrade" feeds/luci/collections/luci/Makefile; then
+          echo "警告：依赖移除失败"
+        else
+          echo "成功：attendedsysupgrade 依赖已移除"
+        fi
     - name: 加载config & DIY_P2_SH
       run: |
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
