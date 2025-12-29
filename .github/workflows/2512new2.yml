@@ -148,6 +148,7 @@ jobs:
 
     - name: 注入 MT7986 极致性能内核优化
       run: |
+        cd openwrt
         KCONFIG="target/linux/mediatek/filogic/config-6.12"
         if [ ! -f "$KCONFIG" ]; then
           echo "❌ 找不到 $KCONFIG，尝试自动查找..."
