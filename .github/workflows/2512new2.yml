@@ -155,32 +155,31 @@ jobs:
         fi
         [ -z "$KCONFIG" ] && echo "错误：未找到内核配置文件" && exit 1
 
-        echo "== 正在注入 MT7986 极致优化参数至 $KCONFIG =="
+        echo "== 正在注入 MT7986 优化参数至 $KCONFIG =="
 
-    # ---------- 明确关闭 THP ----------
-        sed -i 's/CONFIG_TRANSPARENT_HUGEPAGE=y/# CONFIG_TRANSPARENT_HUGEPAGE is not set/' "$KCONFIG"
-        sed -i 's/CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS=y/# CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS is not set/' "$KCONFIG"
+        # ---------- 明确关闭 THP (解决部分内存溢出隐患，提升小包转发稳定性) ----------
+        # 先删除所有相关的旧配置，再追加关闭指令
+        sed -i '/CONFIG_TRANSPARENT_HUGEPAGE/d' "$KCONFIG"
+        echo "# CONFIG_TRANSPARENT_HUGEPAGE is not set" >> "$KCONFIG"
 
-
-        # 2. 调度模型：自愿抢占 (平衡吞吐量与延迟)
-        sed -i 's/CONFIG_PREEMPT_NONE=y/# CONFIG_PREEMPT_NONE is not set/' "$KCONFIG"
-        sed -i '/CONFIG_PREEMPT_VOLUNTARY/d' "$KCONFIG"
+        # ---------- 调度模型：自愿抢占 (平衡吞吐量与延迟) ----------
+        sed -i '/CONFIG_PREEMPT/d' "$KCONFIG"
         echo "CONFIG_PREEMPT_VOLUNTARY=y" >> "$KCONFIG"
 
-        # 3. 开启 TCP BBR (极致网速核心)
+        # ---------- 开启 TCP BBR (极致网速核心) ----------
         sed -i '/CONFIG_TCP_CONG_BBR/d' "$KCONFIG"
         echo "CONFIG_TCP_CONG_BBR=y" >> "$KCONFIG"
+        # 设置默认拥塞控制算法为 BBR
         sed -i 's/CONFIG_DEFAULT_TCP_CONG=.*/CONFIG_DEFAULT_TCP_CONG="bbr"/' "$KCONFIG"
 
-        # 4. 优化网络队列 qdisc (配合 BBR)
+        # ---------- 优化网络队列 qdisc (配合 BBR) ----------
         sed -i '/CONFIG_NET_SCH_FQ/d' "$KCONFIG"
         echo "CONFIG_NET_SCH_FQ=y" >> "$KCONFIG"
 
-        # 5. 移除内核调试开销 (极致稳定与安全)
+        # ---------- 移除内核调试开销 (极致稳定与安全) ----------
         sed -i 's/CONFIG_DEBUG_KERNEL=y/# CONFIG_DEBUG_KERNEL is not set/' "$KCONFIG"
         sed -i 's/CONFIG_FTRACE=y/# CONFIG_FTRACE is not set/' "$KCONFIG"
         sed -i 's/CONFIG_SYMBOLIC_ERRNAME=y/# CONFIG_SYMBOLIC_ERRNAME is not set/' "$KCONFIG"
-        sed -i 's/CONFIG_DEBUG_MISC=y/# CONFIG_DEBUG_MISC is not set/' "$KCONFIG"
 
         echo "✅ 内核优化参数注入完成"
 
