@@ -146,27 +146,54 @@ jobs:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-    - name: 开启内核透明大页优化(THP)
+    - name: 注入 MT7986 正确内核编译期优化
       run: |
-        # 定位到对应目标平台的内核配置文件
         KCONFIG="target/linux/mediatek/filogic/config-6.12"
-    
-        # 修改内核配置项
-        if [ -f "$KCONFIG" ]; then
-          echo "CONFIG_TRANSPARENT_HUGEPAGE=y" >> $KCONFIG
-          echo "CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS=y" >> $KCONFIG
-          echo "CONFIG_TRANSPARENT_HUGEPAGE_MADVISE=n" >> $KCONFIG
-          # 提高内核 HZ，增强网络响应精度（默认可能是 100 或 250，改为 1000 适合高性能路由）
-          echo "CONFIG_HZ=1000" >> target/linux/mediatek/filogic/config-6.12
-          echo "CONFIG_HZ_1000=y" >> target/linux/mediatek/filogic/config-6.12
-
-          # 开启 BBRv3 的内核基础支持
-          echo "CONFIG_TCP_CONG_BBR=y" >> target/linux/mediatek/filogic/config-6.12
-          echo "CONFIG_DEFAULT_BBR=y" >> target/linux/mediatek/filogic/config-6.12
-          echo "内核 THP 配置已注入"
-        else
-          echo "错误: 找不到内核配置文件 $KCONFIG"
+        if [ ! -f "$KCONFIG" ]; then
+        echo "❌ 找不到 $KCONFIG"
+        exit 1
         fi
+
+        echo "== MT7986 kernel optimization =="
+
+    # ---------- 调度模型 ----------
+    sed -i \
+          -e 's/# CONFIG_PREEMPT_VOLUNTARY is not set/CONFIG_PREEMPT_VOLUNTARY=y/' \
+          -e 's/CONFIG_PREEMPT_NONE=y/# CONFIG_PREEMPT_NONE is not set/' \
+      "$KCONFIG"
+
+    # ---------- HZ：保持 250（如果被改过就修正） ----------
+    sed -i \
+      -e 's/CONFIG_HZ=.*/CONFIG_HZ=250/' \
+      -e 's/CONFIG_HZ_1000=y/# CONFIG_HZ_1000 is not set/' \
+      -e 's/# CONFIG_HZ_250 is not set/CONFIG_HZ_250=y/' \
+      "$KCONFIG"
+
+    # ---------- TCP BBR v1 ----------
+    sed -i \
+      -e 's/# CONFIG_TCP_CONG_BBR is not set/CONFIG_TCP_CONG_BBR=y/' \
+      -e 's/CONFIG_DEFAULT_TCP_CONG=.*/CONFIG_DEFAULT_TCP_CONG="bbr"/' \
+      "$KCONFIG"
+
+    # ---------- fq qdisc ----------
+    sed -i \
+      -e 's/# CONFIG_NET_SCH_FQ is not set/CONFIG_NET_SCH_FQ=y/' \
+      "$KCONFIG"
+
+    # ---------- 明确关闭 THP ----------
+    sed -i \
+      -e 's/CONFIG_TRANSPARENT_HUGEPAGE=y/# CONFIG_TRANSPARENT_HUGEPAGE is not set/' \
+      -e 's/CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS=y/# CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS is not set/' \
+      "$KCONFIG"
+
+    # ---------- 裁剪调试功能 ----------
+    sed -i \
+      -e 's/CONFIG_DEBUG_KERNEL=y/# CONFIG_DEBUG_KERNEL is not set/' \
+      -e 's/CONFIG_FTRACE=y/# CONFIG_FTRACE is not set/' \
+      "$KCONFIG"
+
+    echo "✅ MT7986 kernel config injected"
+
 
     - name: 下载安装包
       id: package
