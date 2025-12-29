@@ -146,53 +146,43 @@ jobs:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-    - name: 注入 MT7986 正确内核编译期优化
+    - name: 注入 MT7986 极致性能内核优化
       run: |
         KCONFIG="target/linux/mediatek/filogic/config-6.12"
         if [ ! -f "$KCONFIG" ]; then
-        echo "❌ 找不到 $KCONFIG"
-        exit 1
+          echo "❌ 找不到 $KCONFIG，尝试自动查找..."
+          KCONFIG=$(find target/linux/mediatek/filogic/ -name "config-*" | head -n 1)
         fi
+        [ -z "$KCONFIG" ] && echo "错误：未找到内核配置文件" && exit 1
 
-        echo "== MT7986 kernel optimization =="
-
-    # ---------- 调度模型 ----------
-        sed -i \
-          -e 's/# CONFIG_PREEMPT_VOLUNTARY is not set/CONFIG_PREEMPT_VOLUNTARY=y/' \
-          -e 's/CONFIG_PREEMPT_NONE=y/# CONFIG_PREEMPT_NONE is not set/' \
-        "$KCONFIG"
-
-    # ---------- HZ：保持 250（如果被改过就修正） ----------
-        sed -i \
-          -e 's/CONFIG_HZ=.*/CONFIG_HZ=250/' \
-          -e 's/CONFIG_HZ_1000=y/# CONFIG_HZ_1000 is not set/' \
-          -e 's/# CONFIG_HZ_250 is not set/CONFIG_HZ_250=y/' \
-        "$KCONFIG"
-
-    # ---------- TCP BBR v1 ----------
-        sed -i \
-          -e 's/# CONFIG_TCP_CONG_BBR is not set/CONFIG_TCP_CONG_BBR=y/' \
-          -e 's/CONFIG_DEFAULT_TCP_CONG=.*/CONFIG_DEFAULT_TCP_CONG="bbr"/' \
-        "$KCONFIG"
-
-    # ---------- fq qdisc ----------
-        sed -i \
-          -e 's/# CONFIG_NET_SCH_FQ is not set/CONFIG_NET_SCH_FQ=y/' \
-        "$KCONFIG"
+        echo "== 正在注入 MT7986 极致优化参数至 $KCONFIG =="
 
     # ---------- 明确关闭 THP ----------
-       sed -i \
-        -e 's/CONFIG_TRANSPARENT_HUGEPAGE=y/# CONFIG_TRANSPARENT_HUGEPAGE is not set/' \
-        -e 's/CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS=y/# CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS is not set/' \
-        "$KCONFIG"
+        sed -i 's/CONFIG_TRANSPARENT_HUGEPAGE=y/# CONFIG_TRANSPARENT_HUGEPAGE is not set/' "$KCONFIG"
+        sed -i 's/CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS=y/# CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS is not set/' "$KCONFIG"
 
-    # ---------- 裁剪调试功能 ----------
-    sed -i \
-      -e 's/CONFIG_DEBUG_KERNEL=y/# CONFIG_DEBUG_KERNEL is not set/' \
-      -e 's/CONFIG_FTRACE=y/# CONFIG_FTRACE is not set/' \
-      "$KCONFIG"
 
-      echo "✅ MT7986 kernel config injected"
+        # 2. 调度模型：自愿抢占 (平衡吞吐量与延迟)
+        sed -i 's/CONFIG_PREEMPT_NONE=y/# CONFIG_PREEMPT_NONE is not set/' "$KCONFIG"
+        sed -i '/CONFIG_PREEMPT_VOLUNTARY/d' "$KCONFIG"
+        echo "CONFIG_PREEMPT_VOLUNTARY=y" >> "$KCONFIG"
+
+        # 3. 开启 TCP BBR (极致网速核心)
+        sed -i '/CONFIG_TCP_CONG_BBR/d' "$KCONFIG"
+        echo "CONFIG_TCP_CONG_BBR=y" >> "$KCONFIG"
+        sed -i 's/CONFIG_DEFAULT_TCP_CONG=.*/CONFIG_DEFAULT_TCP_CONG="bbr"/' "$KCONFIG"
+
+        # 4. 优化网络队列 qdisc (配合 BBR)
+        sed -i '/CONFIG_NET_SCH_FQ/d' "$KCONFIG"
+        echo "CONFIG_NET_SCH_FQ=y" >> "$KCONFIG"
+
+        # 5. 移除内核调试开销 (极致稳定与安全)
+        sed -i 's/CONFIG_DEBUG_KERNEL=y/# CONFIG_DEBUG_KERNEL is not set/' "$KCONFIG"
+        sed -i 's/CONFIG_FTRACE=y/# CONFIG_FTRACE is not set/' "$KCONFIG"
+        sed -i 's/CONFIG_SYMBOLIC_ERRNAME=y/# CONFIG_SYMBOLIC_ERRNAME is not set/' "$KCONFIG"
+        sed -i 's/CONFIG_DEBUG_MISC=y/# CONFIG_DEBUG_MISC is not set/' "$KCONFIG"
+
+        echo "✅ 内核优化参数注入完成"
 
 
     - name: 下载安装包
