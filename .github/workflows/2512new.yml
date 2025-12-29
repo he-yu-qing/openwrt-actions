@@ -175,7 +175,7 @@ jobs:
           echo "内核 THP 配置已注入"
         else
           echo "错误: 找不到内核配置文件 $KCONFIG"
-         fi
+        fi
 
     - name: 编译固件
       id: compile
