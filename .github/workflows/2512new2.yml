@@ -157,34 +157,34 @@ jobs:
         echo "== MT7986 kernel optimization =="
 
     # ---------- 调度模型 ----------
-    sed -i \
+        sed -i \
           -e 's/# CONFIG_PREEMPT_VOLUNTARY is not set/CONFIG_PREEMPT_VOLUNTARY=y/' \
           -e 's/CONFIG_PREEMPT_NONE=y/# CONFIG_PREEMPT_NONE is not set/' \
-      "$KCONFIG"
+        "$KCONFIG"
 
     # ---------- HZ：保持 250（如果被改过就修正） ----------
-    sed -i \
-      -e 's/CONFIG_HZ=.*/CONFIG_HZ=250/' \
-      -e 's/CONFIG_HZ_1000=y/# CONFIG_HZ_1000 is not set/' \
-      -e 's/# CONFIG_HZ_250 is not set/CONFIG_HZ_250=y/' \
-      "$KCONFIG"
+        sed -i \
+          -e 's/CONFIG_HZ=.*/CONFIG_HZ=250/' \
+          -e 's/CONFIG_HZ_1000=y/# CONFIG_HZ_1000 is not set/' \
+          -e 's/# CONFIG_HZ_250 is not set/CONFIG_HZ_250=y/' \
+        "$KCONFIG"
 
     # ---------- TCP BBR v1 ----------
-    sed -i \
-      -e 's/# CONFIG_TCP_CONG_BBR is not set/CONFIG_TCP_CONG_BBR=y/' \
-      -e 's/CONFIG_DEFAULT_TCP_CONG=.*/CONFIG_DEFAULT_TCP_CONG="bbr"/' \
-      "$KCONFIG"
+        sed -i \
+          -e 's/# CONFIG_TCP_CONG_BBR is not set/CONFIG_TCP_CONG_BBR=y/' \
+          -e 's/CONFIG_DEFAULT_TCP_CONG=.*/CONFIG_DEFAULT_TCP_CONG="bbr"/' \
+        "$KCONFIG"
 
     # ---------- fq qdisc ----------
-    sed -i \
-      -e 's/# CONFIG_NET_SCH_FQ is not set/CONFIG_NET_SCH_FQ=y/' \
-      "$KCONFIG"
+        sed -i \
+          -e 's/# CONFIG_NET_SCH_FQ is not set/CONFIG_NET_SCH_FQ=y/' \
+        "$KCONFIG"
 
     # ---------- 明确关闭 THP ----------
-    sed -i \
-      -e 's/CONFIG_TRANSPARENT_HUGEPAGE=y/# CONFIG_TRANSPARENT_HUGEPAGE is not set/' \
-      -e 's/CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS=y/# CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS is not set/' \
-      "$KCONFIG"
+       sed -i \
+        -e 's/CONFIG_TRANSPARENT_HUGEPAGE=y/# CONFIG_TRANSPARENT_HUGEPAGE is not set/' \
+        -e 's/CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS=y/# CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS is not set/' \
+        "$KCONFIG"
 
     # ---------- 裁剪调试功能 ----------
     sed -i \
@@ -192,7 +192,7 @@ jobs:
       -e 's/CONFIG_FTRACE=y/# CONFIG_FTRACE is not set/' \
       "$KCONFIG"
 
-    echo "✅ MT7986 kernel config injected"
+      echo "✅ MT7986 kernel config injected"
 
 
     - name: 下载安装包
