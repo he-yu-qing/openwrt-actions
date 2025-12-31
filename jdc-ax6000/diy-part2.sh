@@ -75,6 +75,8 @@ echo "ZRAM+CPU绑定+看门狗已整合到 /etc/rc.local"
 # ==================== 追加sysctl内核优化参数（核心执行步骤，之前缺失）====================
 SYSCTL_CONF="$GITHUB_WORKSPACE/openwrt/package/base-files/files/etc/sysctl.conf"
 cat >> "$SYSCTL_CONF" << EOF
+# User defined entries should be added to this file not to /etc/sysctl.d/* as
+# that directory is not backed-up by default and will not survive a reimag
 net.core.rmem_max = 33554432
 net.core.wmem_max = 33554432
 net.core.rmem_default = 1048576
@@ -90,7 +92,7 @@ net.ipv4.tcp_fastopen = 3
 net.ipv4.tcp_fin_timeout = 30
 net.ipv4.tcp_tw_reuse = 1 
 net.ipv4.tcp_tw_recycle = 0  
-net.ipv4.tcp_max_tw_buckets = 2000000
+net.ipv4.tcp_max_tw_buckets = 200000
 net.ipv4.tcp_max_syn_backlog = 65535
 net.ipv4.tcp_slow_start_after_idle = 0
 net.ipv4.tcp_sack = 1
@@ -105,32 +107,32 @@ net.ipv4.icmp_echo_ignore_broadcasts = 1
 net.ipv4.icmp_ignore_bogus_error_responses = 1
 net.ipv4.conf.all.accept_source_route = 0
 net.ipv4.conf.default.accept_source_route = 0
-net.ipv4.conf.all.rp_filter = 1
-net.ipv4.conf.default.rp_filter = 1
+net.ipv4.conf.all.rp_filter = 0
+net.ipv4.conf.default.rp_filter = 0
 net.ipv4.conf.all.send_redirects = 0
 net.ipv4.conf.default.send_redirects = 0
-vm.dirty_ratio = 30
-vm.dirty_background_ratio = 10
+vm.dirty_ratio = 15
+vm.dirty_background_ratio = 5
 fs.file-max = 1000000
 fs.inotify.max_user_instances = 8192
 vm.swappiness=10
 vm.vfs_cache_pressure=50
 net.ipv4.tcp_rmem=4096 131072 33554432
 net.ipv4.tcp_wmem=4096 131072 33554432
+
 EOF
 echo "sysctl内核优化参数已追加到 /etc/sysctl.conf"
 
 # ==================== 内置自定义防火墙规则 ====================
 CUSTOM_FIREWALL=$(cat << 'EOF'
+
 config defaults
 	option input 'REJECT'
 	option output 'ACCEPT'
 	option forward 'REJECT'
-	option flow_offloading '1'
-	option flow_offloading_hw '1'
-	option fullcone '0'
-	option fullcone6 '0'
+	option fullcone6 '1'
 	option synflood_protect '1'
+	option drop_invalid '1'
 
 config zone
 	option name 'lan'
@@ -138,21 +140,16 @@ config zone
 	option input 'ACCEPT'
 	option output 'ACCEPT'
 	option forward 'ACCEPT'
-	option masq '1'
-	option mtu_fix '1'
 
 config zone
 	option name 'wan'
-	option input 'REJECT'
-	option output 'ACCEPT'
-	option forward 'REJECT'
-	option masq '1'
-	option mtu_fix '1'
-	option log '1'
-	option log_level 'warning'
 	list network 'wan'
 	list network 'wan6'
-	list network 'moden'  # 注意：确认固件中接口名称是否为moden（建议检查是否为笔误modem）
+	option input 'DROP'
+	option output 'ACCEPT'
+	option forward 'DROP'
+	option masq '1'
+	option mtu_fix '1'
 
 config forwarding
 	option src 'lan'
@@ -173,7 +170,6 @@ config rule
 	option icmp_type 'echo-request'
 	option family 'ipv4'
 	option target 'ACCEPT'
-	option enabled '0'
 
 config rule
 	option name 'Allow-IGMP'
@@ -217,8 +213,7 @@ config rule
 	list icmp_type 'neighbour-solicitation'
 	list icmp_type 'router-advertisement'
 	list icmp_type 'neighbour-advertisement'
-	option limit '5/sec'
-	option limit_burst '10'
+	option limit '1000/sec'
 	option family 'ipv6'
 	option target 'ACCEPT'
 
@@ -253,7 +248,6 @@ config rule
 	option proto 'udp'
 	option target 'ACCEPT'
 
-
 config zone
 	option name 'IPTV'
 	option input 'ACCEPT'
@@ -273,10 +267,7 @@ config zone
 	option input 'REJECT'
 	option output 'ACCEPT'
 	option forward 'REJECT'
-	option masq '1'
-	option masq6 '1'
-	option log '1'
-	option mtu_fix '1'
+	option log '0'
 
 config rule
 	option name 'wireguard'
@@ -286,22 +277,83 @@ config rule
 	option family 'ipv6'
 	option dest_port '64189'
 
-config rule
-	option name 'Allow-Router-DNS'
+config forwarding
+	option src 'wireguard'
+	option dest 'lan'
+
+config forwarding
+	option src 'wireguard'
+	option dest 'wan'
+
+config include 'homeproxy_forward'
+	option type 'nftables'
+	option path '/var/run/homeproxy/fw4_forward.nft'
+	option position 'chain-pre'
+	option chain 'forward'
+
+config include 'homeproxy_input'
+	option type 'nftables'
+	option path '/var/run/homeproxy/fw4_input.nft'
+	option position 'chain-pre'
+	option chain 'input'
+
+config include 'homeproxy_post'
+	option type 'nftables'
+	option path '/var/run/homeproxy/fw4_post.nft'
+	option position 'table-post'
+
+config include 'passwall'
+	option type 'script'
+	option path '/var/etc/passwall.include'
+	option reload '1'
+
+config include 'passwall_server'
+	option type 'script'
+	option path '/var/etc/passwall_server.include'
+	option reload '1'
+
+config redirect 'adguardhome_dns_udp'
+	option name 'AdGuardHome DNS UDP'
 	option src 'lan'
-	option proto 'tcp udp'
-	option dest_port '53'
-	option dest_ip '192.168.123.1'
-	option target 'ACCEPT'
+	option proto 'udp'
+	option src_dport '53'
+	option dest_port '5553'
+	option target 'DNAT'
+	option family 'any'
+
+config redirect 'adguardhome_dns_tcp'
+	option name 'AdGuardHome DNS TCP'
+	option src 'lan'
+	option proto 'tcp'
+	option src_dport '53'
+	option dest_port '5553'
+	option target 'DNAT'
 	option family 'any'
 
 config rule
 	option name 'Block-External-DNS'
 	option src 'lan'
+	option dest 'wan'
 	option proto 'tcp udp'
 	option dest_port '53'
 	option target 'REJECT'
+
+config rule
+	option name 'Block-External-DNS-IPv6'
+	option src 'lan'
+	option dest 'wan'
+	option proto 'tcp udp'
+	option dest_port '53'
+	option family 'ipv6'
+	option target 'REJECT'
+
+config redirect 'adguardhome_redirect'
+	option target 'DNAT'
+	option name 'AdGuard Home'
+	option src 'lan'
 	option family 'any'
+	option src_dport '53'
+	option dest_port '5553'
 
 EOF
 )
