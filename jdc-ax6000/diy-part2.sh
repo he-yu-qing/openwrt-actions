@@ -13,11 +13,6 @@
 ##-----------------Del duplicate packages------------------
 rm -rf feeds/packages/net/open-app-filter
 
-# 覆盖rc.local文件（核心执行步骤，之前缺失）
-RC_LOCAL="$GITHUB_WORKSPACE/openwrt/package/base-files/files/etc/rc.local"
-echo "$COMPLETE_RC_LOCAL" > $RC_LOCAL
-chmod +x $RC_LOCAL  # 赋予执行权限
-echo "ZRAM+CPU绑定+看门狗已整合到 /etc/rc.local"
 
 # ==================== 追加sysctl内核优化参数（核心执行步骤，之前缺失）====================
 SYSCTL_CONF="$GITHUB_WORKSPACE/openwrt/package/base-files/files/etc/sysctl.conf"
