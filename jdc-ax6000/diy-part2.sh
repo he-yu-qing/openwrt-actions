@@ -72,26 +72,29 @@ config defaults
 	option input 'REJECT'
 	option output 'ACCEPT'
 	option forward 'REJECT'
-	option fullcone6 '1'
 	option synflood_protect '1'
 	option drop_invalid '1'
+	option flow_offloading_hw '0'
+	option flow_offloading '0'
+	option fullcone '0'
 
 config zone
 	option name 'lan'
-	list network 'lan'
 	option input 'ACCEPT'
 	option output 'ACCEPT'
 	option forward 'ACCEPT'
+	list network 'lan'
 
 config zone
 	option name 'wan'
-	list network 'wan'
-	list network 'wan6'
 	option input 'DROP'
 	option output 'ACCEPT'
 	option forward 'DROP'
 	option masq '1'
 	option mtu_fix '1'
+	list network 'wan'
+	list network 'wan6'
+	list network 'moden'
 
 config forwarding
 	option src 'lan'
@@ -112,6 +115,7 @@ config rule
 	option icmp_type 'echo-request'
 	option family 'ipv4'
 	option target 'ACCEPT'
+	option enabled '0'
 
 config rule
 	option name 'Allow-IGMP'
@@ -206,18 +210,19 @@ config rule
 
 config zone
 	option name 'wireguard'
-	option input 'REJECT'
+	option input 'ACCEPT'
 	option output 'ACCEPT'
-	option forward 'REJECT'
-	option log '0'
+	option forward 'ACCEPT'
+	list network 'wireguard'
 
 config rule
 	option name 'wireguard'
 	option src 'wan'
 	option target 'ACCEPT'
-	list proto 'udp'
 	option family 'ipv6'
 	option dest_port '64189'
+	list proto 'tcp'
+	list proto 'udp'
 
 config forwarding
 	option src 'wireguard'
@@ -226,51 +231,6 @@ config forwarding
 config forwarding
 	option src 'wireguard'
 	option dest 'wan'
-
-config include 'homeproxy_forward'
-	option type 'nftables'
-	option path '/var/run/homeproxy/fw4_forward.nft'
-	option position 'chain-pre'
-	option chain 'forward'
-
-config include 'homeproxy_input'
-	option type 'nftables'
-	option path '/var/run/homeproxy/fw4_input.nft'
-	option position 'chain-pre'
-	option chain 'input'
-
-config include 'homeproxy_post'
-	option type 'nftables'
-	option path '/var/run/homeproxy/fw4_post.nft'
-	option position 'table-post'
-
-config include 'passwall'
-	option type 'script'
-	option path '/var/etc/passwall.include'
-	option reload '1'
-
-config include 'passwall_server'
-	option type 'script'
-	option path '/var/etc/passwall_server.include'
-	option reload '1'
-
-config redirect 'adguardhome_dns_udp'
-	option name 'AdGuardHome DNS UDP'
-	option src 'lan'
-	option proto 'udp'
-	option src_dport '53'
-	option dest_port '5553'
-	option target 'DNAT'
-	option family 'any'
-
-config redirect 'adguardhome_dns_tcp'
-	option name 'AdGuardHome DNS TCP'
-	option src 'lan'
-	option proto 'tcp'
-	option src_dport '53'
-	option dest_port '5553'
-	option target 'DNAT'
-	option family 'any'
 
 config rule
 	option name 'Block-External-DNS'
@@ -289,13 +249,14 @@ config rule
 	option family 'ipv6'
 	option target 'REJECT'
 
-config redirect 'adguardhome_redirect'
-	option target 'DNAT'
-	option name 'AdGuard Home'
+config redirect
+	option name 'AdGuardHome DNS'
 	option src 'lan'
-	option family 'any'
+	option proto 'tcp udp'
 	option src_dport '53'
 	option dest_port '5553'
+	option target 'DNAT'
+	option family 'any'
 
 EOF
 )
