@@ -161,9 +161,9 @@ jobs:
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
         
-    - name: 复制Wi-Fi驱动文件到dl文件夹
-      run: |
-        cp -r $GITHUB_WORKSPACE/2512-612/dl/* openwrt/dl/
+     #- name: 复制Wi-Fi驱动文件到dl文件夹
+     #  run: |
+     #    cp -r $GITHUB_WORKSPACE/2512-612/dl/* openwrt/dl/
         
     - name: 编译固件
       id: compile
