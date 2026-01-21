@@ -95,12 +95,12 @@ jobs:
         chmod +x $DIY_P1_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
-#    - name: 注入 filogic 内核配置片段
-#      run: |
-#        cd openwrt
-#        mkdir -p target/linux/mediatek/filogic
-#        cp $GITHUB_WORKSPACE/2512-612/kernel/filogic/*.conf \
-#           target/linux/mediatek/filogic/
+    - name: 注入 filogic 内核配置片段
+      run: |
+        cd openwrt
+        mkdir -p target/linux/mediatek/filogic
+        cp $GITHUB_WORKSPACE/2512-612/kernel/filogic/*.conf \
+           target/linux/mediatek/filogic/
 
     - name: 更新 & 安装 feeds
       run: |
