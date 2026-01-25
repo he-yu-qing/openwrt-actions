@@ -11,7 +11,7 @@
 #
 
 ##-----------------Del duplicate packages------------------
-rm -rf feeds/packages/net/open-app-filter
+# rm -rf feeds/packages/net/open-app-filter
 
 
 # ==================== 追加sysctl内核优化参数（核心执行步骤，之前缺失）====================
