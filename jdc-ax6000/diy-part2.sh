@@ -18,46 +18,48 @@ rm -rf feeds/packages/net/sing-box
 
 COMPLETE_RC_LOCAL=$(cat << 'EOF'
 #!/bin/sh
-
-sleep 5 # 等待驱动完全加载
+sleep 5
 bind_irq() {
-    for irq in $(grep "$1" /proc/interrupts | cut -d: -f1 | tr -d ' '); do
+    name="$1"
+    mask="$2"
+       for irq in $(grep "$name" /proc/interrupts | awk '{print $1}' | tr -d ':'); do
         if [ -d "/proc/irq/$irq" ]; then
-            echo "$2" > /proc/irq/$irq/smp_affinity
-            echo "IRQ $irq ($1) -> CPU Mask $2" > /dev/console
+            echo "$mask" > /proc/irq/$irq/smp_affinity
+            logger -t "rc.local" "优化绑定: IRQ $irq ($name) -> CPU掩码 $mask"
         fi
     done
 }
-bind_irq "mt7986-wmac" 8
-bind_irq "ethernet" 6  # 将以太网中断分散到 CPU1 和 CPU2 (Mask 6 = 4+2)
-
+bind_irq "0000:00:00.0" 8
+bind_irq "ccif_wo_isr" 8
+bind_irq "15100000.ethernet" 6
+bind_irq "11230000.mmc" 1
+bind_irq "10320000.crypto" 1
 for net in /sys/class/net/eth*; do
     [ -d "$net" ] || continue
-    # RPS: 接收包转向 (Receive Packet Steering) -> 均衡到所有核心 (f)
     for rps in "$net"/queues/rx-*/rps_cpus; do echo f > "$rps"; done
-    # XPS: 发送包转向 (Transmit Packet Steering) -> 均衡到所有核心 (f)
     for xps in "$net"/queues/tx-*/xps_cpus; do echo f > "$xps"; done
 done
 
 bind_process() {
     pname="$1"
-    mask="$2" # 这里的 mask 是十六进制
+    mask="$2"
     for pid in $(pidof "$pname"); do
         taskset -p "$mask" "$pid" >/dev/null 2>&1
     done
 }
-
-
-bind_process "netifd" 3
-bind_process "ubus" 3
-bind_process "uhttpd" 3
-bind_process "dnsmasq" 3
-bind_process "xray" c
-bind_process "sing-box" c
-bind_process "AdGuardHome" c
-bind_process "homeproxy" c
-bind_process "mosdns" c
-
+bind_process "netifd" 1
+bind_process "ubus" 1
+bind_process "dnsmasq" 1
+bind_process "logd" 1
+bind_process "procd" 1
+bind_process "uhttpd" 6
+bind_process "dropbear" 6
+bind_process "sing-box" 4
+bind_process "xray" 4
+bind_process "AdGuardHome" 4
+bind_process "homeproxy" 4
+bind_process "mosdns" 4
+logger -t "rc.local" "极致性能优化脚本执行完毕：Wi-Fi(CPU3), Eth(CPU1/2), App(分流)"
 exit 0
 EOF
 )
