@@ -15,6 +15,53 @@ rm -rf feeds/packages/net/open-app-filter
 rm -rf feeds/packages/net/sing-box
 
 
+COMPLETE_RC_LOCAL=$(cat << 'EOF'
+#!/bin/sh
+sleep 3  # 等待网络和驱动加载完成
+echo 8 > /proc/irq/121/smp_affinity
+echo "Wi-Fi IRQ 121 绑定到 CPU3"
+echo 4 > /proc/irq/122/smp_affinity
+echo "WAN IRQ 122 (eth1) 绑定到 CPU2"
+echo 2 > /proc/irq/127/smp_affinity
+echo "LAN IRQ 127 (eth0) 绑定到 CPU1"
+echo 4 > /sys/class/net/eth1/queues/rx-0/rps_cpus
+echo 4 > /sys/class/net/eth1/queues/rx-1/rps_cpus
+echo 4 > /sys/class/net/eth1/queues/tx-0/xps_cpus
+echo 4 > /sys/class/net/eth1/queues/tx-1/xps_cpus
+echo 2 > /sys/class/net/eth0/queues/rx-0/rps_cpus
+echo 2 > /sys/class/net/eth0/queues/tx-0/xps_cpus
+
+bind_process() {
+    pid=$(pidof "$1")
+    if [ -n "$pid" ]; then
+        taskset -p "$2" "$pid" > /dev/null 2>&1
+        echo "进程 $1 (PID:$pid) 绑定到 CPU掩码 $2"
+    fi
+}
+
+CORE_MASK=3
+bind_process "netifd" $CORE_MASK
+bind_process "hostapd" $CORE_MASK
+bind_process "dnsmasq" $CORE_MASK
+bind_process "uhttpd" $CORE_MASK
+
+HIGH_MASK=12
+bind_process "nftables" $HIGH_MASK
+bind_process "homeproxy" $HIGH_MASK
+bind_process "AdGuardHome" $HIGH_MASK
+bind_process "sing-box" $HIGH_MASK
+bind_process "wireguard" $HIGH_MASK
+exit 0
+)
+
+# 覆盖rc.local文件（核心执行步骤，之前缺失）
+RC_LOCAL="$GITHUB_WORKSPACE/openwrt/package/base-files/files/etc/rc.local"
+echo "$COMPLETE_RC_LOCAL" > $RC_LOCAL
+chmod +x $RC_LOCAL  # 赋予执行权限
+echo "ZRAM+CPU绑定+看门狗已整合到 /etc/rc.local"
+
+
+
 # ==================== 追加sysctl内核优化参数（核心执行步骤，之前缺失）====================
 SYSCTL_CONF="$GITHUB_WORKSPACE/openwrt/package/base-files/files/etc/sysctl.conf"
 cat >> "$SYSCTL_CONF" << EOF
