@@ -14,63 +14,95 @@
 rm -rf feeds/packages/net/open-app-filter
 rm -rf feeds/packages/net/sing-box
 
-
-
 COMPLETE_RC_LOCAL=$(cat << 'EOF'
 #!/bin/sh
-sleep 5
+
+# 1. 停止 irqbalance (防止其接管中断，导致手动绑定失效)
+if [ -f /etc/init.d/irqbalance ]; then
+    /etc/init.d/irqbalance stop
+    /etc/init.d/irqbalance disable
+fi
+
+# 等待 MTK 闭源驱动 / IRQ 完全注册
+sleep 10
+
+# 辅助函数：绑定中断到指定 CPU 掩码
 bind_irq() {
     name="$1"
     mask="$2"
-       for irq in $(grep "$name" /proc/interrupts | awk '{print $1}' | tr -d ':'); do
+    # 使用 grep 和 awk 查找中断号，避开 xargs 兼容性问题
+    for irq in $(grep "$name" /proc/interrupts | awk '{print $1}' | tr -d ':'); do
         if [ -d "/proc/irq/$irq" ]; then
             echo "$mask" > /proc/irq/$irq/smp_affinity
             logger -t "rc.local" "优化绑定: IRQ $irq ($name) -> CPU掩码 $mask"
         fi
     done
 }
-bind_irq "0000:00:00.0" 8
-bind_irq "ccif_wo_isr" 8
+
+# --- IRQ 绑定策略 (Filogic 830 / MT7986 4核 A53) ---
+# CPU3 (Mask 8): 专用于 Wi-Fi 和 HNAT 硬件加速
+bind_irq "0000:00:00.0" 8        # PCIe / Wi-Fi
+bind_irq "ccif_wo_isr" 8         # MTK WED/WHNAT 硬件加速
+
+# CPU1+2 (Mask 6): 专用于有线网络 (ETH)
 bind_irq "15100000.ethernet" 6
-bind_irq "11230000.mmc" 1
-bind_irq "10320000.crypto" 1
+
+# CPU0 (Mask 1): 专用于 I/O 和 加密，不干扰网络
+bind_irq "11230000.mmc" 1        # eMMC 存储
+bind_irq "10320000.crypto" 1     # Crypto 引擎
+
+# --- RPS / XPS 全核优化 ---
+# 让所有 CPU 参与软中断处理，防止单核瓶颈
 for net in /sys/class/net/eth*; do
     [ -d "$net" ] || continue
     for rps in "$net"/queues/rx-*/rps_cpus; do echo f > "$rps"; done
     for xps in "$net"/queues/tx-*/xps_cpus; do echo f > "$xps"; done
 done
 
+# --- 进程绑核策略 ---
 bind_process() {
     pname="$1"
     mask="$2"
+    # 处理可能有多个 PID 的情况
     for pid in $(pidof "$pname"); do
         taskset -p "$mask" "$pid" >/dev/null 2>&1
     done
 }
+
+# [CPU 0] 系统底层服务
+bind_process "procd" 1
+bind_process "logd" 1
 bind_process "netifd" 1
 bind_process "ubus" 1
 bind_process "dnsmasq" 1
-bind_process "logd" 1
-bind_process "procd" 1
+
+# [CPU 1,2] 高性能网络服务 (配合 eth 中断)
 bind_process "uhttpd" 6
 bind_process "dropbear" 6
+
+# [CPU 2] 代理与广告过滤 (独立核心，不抢占 WiFi/ETH)
 bind_process "sing-box" 4
 bind_process "xray" 4
 bind_process "AdGuardHome" 4
 bind_process "homeproxy" 4
 bind_process "mosdns" 4
-logger -t "rc.local" "极致性能优化脚本执行完毕：Wi-Fi(CPU3), Eth(CPU1/2), App(分流)"
+
+# 延迟写日志，确保 logd 已就绪
+(
+    sleep 5
+    logger -t rc.local "MT7986 极致性能策略已生效：Wi-Fi(CPU3), Eth(CPU1/2), App分流"
+) &
+
 exit 0
 EOF
 )
 
-# 写入文件并赋予权限
+# 写入文件并赋予执行权限
 RC_LOCAL="$GITHUB_WORKSPACE/openwrt/package/base-files/files/etc/rc.local"
-# 确保目录存在
 mkdir -p "$(dirname "$RC_LOCAL")"
 echo "$COMPLETE_RC_LOCAL" > "$RC_LOCAL"
 chmod +x "$RC_LOCAL"
-echo "/etc/rc.local"
+echo "rc.local 注入成功"
 
 
 
