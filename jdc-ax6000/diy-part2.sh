@@ -19,15 +19,7 @@ rm -rf feeds/packages/net/sing-box
 COMPLETE_RC_LOCAL=$(cat << 'EOF'
 #!/bin/sh
 
-# 1. 禁用 irqbalance 以防覆盖手动设置 (极致性能必须独占控制权)
-/etc/init.d/irqbalance stop 2>/dev/null
-/etc/init.d/irqbalance disable 2>/dev/null
-
 sleep 5 # 等待驱动完全加载
-
-# 辅助函数：将中断绑定到特定 CPU (Hex掩码)
-# 参数 1: 关键词 (如 eth0, mt7986)
-# 参数 2: CPU掩码 (Hex: 1=CPU0, 2=CPU1, 4=CPU2, 8=CPU3)
 bind_irq() {
     for irq in $(grep "$1" /proc/interrupts | cut -d: -f1 | tr -d ' '); do
         if [ -d "/proc/irq/$irq" ]; then
@@ -36,23 +28,9 @@ bind_irq() {
         fi
     done
 }
-
-# --- 中断绑定 (针对 MT7986 4核 A53 优化) ---
-# CPU0 (1): 系统基础中断/软中断
-# CPU1 (2): LAN 中断
-# CPU2 (4): WAN 中断
-# CPU3 (8): Wi-Fi 中断 (吞吐量大户)
-
-# 动态查找并绑定 Wi-Fi (mt7986-wmac) 到 CPU3
 bind_irq "mt7986-wmac" 8
-
-# 动态查找并绑定 Ethernet (eth0/eth1)
-# 注意：OpenWrt 中 eth0/eth1 的物理对应关系可能随版本变化，建议基于驱动名
-# 通常 11280000.ethernet 是以太网控制器
 bind_irq "ethernet" 6  # 将以太网中断分散到 CPU1 和 CPU2 (Mask 6 = 4+2)
 
-# --- RPS/XPS 软队列优化 (网卡多队列) ---
-# 启用所有 CPU 处理软中断接收，防止单核打满
 for net in /sys/class/net/eth*; do
     [ -d "$net" ] || continue
     # RPS: 接收包转向 (Receive Packet Steering) -> 均衡到所有核心 (f)
@@ -61,8 +39,6 @@ for net in /sys/class/net/eth*; do
     for xps in "$net"/queues/tx-*/xps_cpus; do echo f > "$xps"; done
 done
 
-# --- 进程绑定 (Taskset) ---
-# 辅助函数：绑定进程名下的所有 PID
 bind_process() {
     pname="$1"
     mask="$2" # 这里的 mask 是十六进制
@@ -71,14 +47,11 @@ bind_process() {
     done
 }
 
-# 网络核心进程 -> CPU 0,1 (Mask 3)
+
 bind_process "netifd" 3
 bind_process "ubus" 3
 bind_process "uhttpd" 3
 bind_process "dnsmasq" 3
-
-# 高负载插件 -> CPU 2,3 (Mask c)
-# 让出 CPU 0/1 给内核和网络中断
 bind_process "xray" c
 bind_process "sing-box" c
 bind_process "AdGuardHome" c
