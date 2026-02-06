@@ -35,7 +35,7 @@ env:
   REPO_URL: https://github.com/chasey-dev/immortalwrt-mt798x-rebase
   REPO_BRANCH: 25.12-dev
   FEEDS_CONF: 2512-612/feeds.conf.default
-  CONFIG_FILE: 2512-612/new28.config
+  CONFIG_FILE: 2512-612/new29.config
   DIY_P1_SH: jdc-ax6000/diy-part1.sh
   DIY_P2_SH: jdc-ax6000/diy-part2.sh
   SSH_ACTIONS: false
