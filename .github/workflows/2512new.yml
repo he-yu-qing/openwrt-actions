@@ -32,7 +32,7 @@ on:
 env:
   ###############手动修改##############
   OPENWRT_NAME: JDC-AX6000-6.6
-  REPO_URL: https://github.com/he-yu-qing/2512immortalwrt-mt798x
+  REPO_URL: https://github.com/chasey-dev/immortalwrt-mt798x-rebase
   REPO_BRANCH: 25.12-dev
   FEEDS_CONF: 2512-612/feeds.conf.default
   CONFIG_FILE: 2512-612/new28.config
