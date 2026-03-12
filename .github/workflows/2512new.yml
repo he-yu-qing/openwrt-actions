@@ -35,7 +35,7 @@ env:
   REPO_URL: https://github.com/chasey-dev/immortalwrt-mt798x-rebase
   REPO_BRANCH: 25.12-dev
   FEEDS_CONF: 2512-612/feeds.conf.default
-  CONFIG_FILE: 2512-612/new30.config
+  CONFIG_FILE: 2512-612/new31.config
   DIY_P1_SH: jdc-ax6000/diy-part1.sh
   DIY_P2_SH: jdc-ax6000/diy-part2.sh
   SSH_ACTIONS: false
@@ -156,19 +156,7 @@ jobs:
         sed -i '/CONFIG_PACKAGE_luci-app-dockerman=y/d' .config
         
     # ================== 新增步骤：修复 MTK WiFi 编译错误 ==================
-    - name: 修复 MTK WiFi 驱动编译错误及内核严格警告
-      run: |
-        cd openwrt
-        
-        # 1. 直接修改源码：找到 ap_cfg.c 并将报错的函数标记为未使用 (__attribute__((unused)))
-        echo "Patching MTK WiFi driver ap_cfg.c..."
-        find package/ -type f -name "ap_cfg.c" -exec sed -i 's/static void Get_Sta_Stats/static void __attribute__((unused)) Get_Sta_Stats/g' {} +
-        
-        # 2. 全局内核修改：强制关闭内核 6.x 的 "将警告视为错误 (WERROR)" 选项，防止驱动中其他语法不规范导致编译中断
-        echo "Disabling CONFIG_WERROR in kernel configs..."
-        echo "# CONFIG_WERROR is not set" >> .config
-        sed -i 's/CONFIG_WERROR=y/# CONFIG_WERROR is not set/g' target/linux/mediatek/filogic/config-* 2>/dev/null || true
-    # ======================================================================
+
     - name: SSH链接管理
       uses: P3TERX/ssh2actions@v1.0.0
       if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
