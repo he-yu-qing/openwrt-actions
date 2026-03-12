@@ -128,12 +128,12 @@ jobs:
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
             
-    - name: 复制sing-box到package
-      run: |
+  #  - name: 复制sing-box到package
+  #    run: |
         # 先创建目标目录，-p保证存在不报错、不存在则创建
-        mkdir -p openwrt/package/sing-box
+  #      mkdir -p openwrt/package/sing-box
         # 再复制文件到已存在的目标目录
-        cp -r $GITHUB_WORKSPACE/2512-612/sing-box/* openwrt/package/sing-box
+  #      cp -r $GITHUB_WORKSPACE/2512-612/sing-box/* openwrt/package/sing-box
 
     - name: 设置LAN IP地址（路由器登录地址）
       run: |
@@ -154,7 +154,21 @@ jobs:
       run: |
         cd openwrt
         sed -i '/CONFIG_PACKAGE_luci-app-dockerman=y/d' .config
-
+        
+    # ================== 新增步骤：修复 MTK WiFi 编译错误 ==================
+    - name: 修复 MTK WiFi 驱动编译错误及内核严格警告
+      run: |
+        cd openwrt
+        
+        # 1. 直接修改源码：找到 ap_cfg.c 并将报错的函数标记为未使用 (__attribute__((unused)))
+        echo "Patching MTK WiFi driver ap_cfg.c..."
+        find package/ -type f -name "ap_cfg.c" -exec sed -i 's/static void Get_Sta_Stats/static void __attribute__((unused)) Get_Sta_Stats/g' {} +
+        
+        # 2. 全局内核修改：强制关闭内核 6.x 的 "将警告视为错误 (WERROR)" 选项，防止驱动中其他语法不规范导致编译中断
+        echo "Disabling CONFIG_WERROR in kernel configs..."
+        echo "# CONFIG_WERROR is not set" >> .config
+        sed -i 's/CONFIG_WERROR=y/# CONFIG_WERROR is not set/g' target/linux/mediatek/filogic/config-* 2>/dev/null || true
+    # ======================================================================
     - name: SSH链接管理
       uses: P3TERX/ssh2actions@v1.0.0
       if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
