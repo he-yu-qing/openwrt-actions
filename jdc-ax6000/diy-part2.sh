@@ -12,7 +12,7 @@
 
 ##-----------------Del duplicate packages------------------
 rm -rf feeds/packages/net/open-app-filter
-rm -rf feeds/packages/net/sing-box
+# rm -rf feeds/packages/net/sing-box
 
 COMPLETE_RC_LOCAL=$(cat << 'EOF'
 #!/bin/sh
