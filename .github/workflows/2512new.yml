@@ -96,12 +96,12 @@ jobs:
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
         
-#    - name: 注入 filogic 内核配置片段
-#      run: |
-#        cd openwrt
-#        mkdir -p target/linux/mediatek/filogic
-#        cp $GITHUB_WORKSPACE/2512-612/kernel/filogic/*.conf \
-#           target/linux/mediatek/filogic/
+    - name: 注入 filogic 内核配置片段
+      run: |
+        cd openwrt
+        mkdir -p target/linux/mediatek/filogic
+        cp $GITHUB_WORKSPACE/2512-612/kernel/filogic/*.conf \
+           target/linux/mediatek/filogic/
 
     - name: 更新 & 安装 feeds
       run: |
@@ -155,7 +155,6 @@ jobs:
         cd openwrt
         sed -i '/CONFIG_PACKAGE_luci-app-dockerman=y/d' .config
         
-    # ================== 新增步骤：修复 MTK WiFi 编译错误 ==================
 
     - name: SSH链接管理
       uses: P3TERX/ssh2actions@v1.0.0
