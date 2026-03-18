@@ -1,47 +1,76 @@
-name: 测试
+name: Compile default-settings (Final Fix)
 
 on:
   workflow_dispatch:  # 仅手动触发
 
 jobs:
-  recompile:
+  compile:
     runs-on: ubuntu-22.04
     permissions:
       contents: write
 
     steps:
-    # 1. 仅安装最核心的编译依赖（比原脚本精简80%）
-    - name: 安装核心依赖
+    # 1. 安装最核心依赖（仅保留编译必需）
+    - name: 安装核心编译依赖
       run: |
-        sudo apt-get -qq update
-        sudo apt-get -qq install git build-essential libncurses5-dev libssl-dev flex bison make
+        sudo apt update -y
+        sudo apt install -y git build-essential libncurses5-dev libssl-dev flex bison make curl
+        echo "依赖安装完成"
 
-    # 2. 快速下载源码（仅做这一步，跳过所有无关配置）
-    - name: 下载源码（仅需这一步就能生成openwrt目录）
+    # 2. 克隆源码（增加重试+路径校验，解决克隆失败问题）
+    - name: 下载源码（带重试+校验）
       run: |
-        cd openwrt 
-        git pull
-        # 生成基础配置（编译单个包必需）
+        # 重试3次克隆，避免网络波动
+        for i in {1..3}; do
+          echo "第 $i 次尝试克隆源码..."
+          git clone --depth=1 https://github.com/he-yu-qing/2512immortalwrt-mt798x -b 25.12-dev openwrt && break
+          rm -rf openwrt  # 克隆失败则清理残留
+          sleep 5  # 间隔5秒重试
+        done
+        
+        # 强制校验目录是否存在，不存在则直接报错提示
+        if [ ! -d "openwrt" ]; then
+          echo "错误：源码克隆失败，openwrt目录不存在！"
+          exit 1
+        fi
+        echo "源码克隆成功，openwrt目录已创建"
+
+    # 3. 基础配置（仅保证能编译单个包）
+    - name: 基础配置（feeds+defconfig）
+      run: |
         cd openwrt
-        ./scripts/feeds update -a && ./scripts/feeds install -a
-        make defconfig
+        echo "更新feeds..."
+        ./scripts/feeds update -a > /dev/null 2>&1  # 静默更新，节省时间
+        echo "安装feeds..."
+        ./scripts/feeds install -a > /dev/null 2>&1  # 静默安装
+        echo "生成默认配置..."
+        make defconfig > /dev/null 2>&1
+        echo "基础配置完成"
 
-    # 3. 核心：仅编译default-settings并输出日志（你的核心需求）
+    # 4. 核心：仅编译default-settings+输出详细日志
     - name: 编译default-settings并记录日志
       run: |
+        # 再次校验openwrt目录（双重保障）
+        if [ ! -d "openwrt" ]; then
+          echo "错误：openwrt目录丢失！"
+          exit 1
+        fi
+        
         cd openwrt
         # 清理缓存
         make package/emortal/default-settings/clean
-        # 编译+详细日志
+        # 编译+详细日志（V=s保留所有输出）
         make package/emortal/default-settings/compile V=s 2>&1 | tee compile-error.log
-        # 打印日志
+        # 打印日志到控制台
         cat compile-error.log
-        # 复制到工作区
+        # 复制日志到工作区
         cp compile-error.log $GITHUB_WORKSPACE/
+        echo "编译完成，日志已保存"
 
-    # 4. 上传日志
-    - name: 上传日志
+    # 5. 上传日志（无论编译成功/失败都上传）
+    - name: 上传编译日志
+      if: always()  # 即使前面步骤失败，也上传日志
       uses: actions/upload-artifact@main
       with:
-        name: default-settings-log
+        name: default-settings-final-log
         path: compile-error.log
