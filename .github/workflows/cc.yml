@@ -10,27 +10,38 @@ jobs:
       contents: write
 
     steps:
-    # 关键：直接进入已有的openwrt编译目录（复用之前的环境）
-    - name: 仅编译default-settings并输出详细日志
+    # 1. 仅安装最核心的编译依赖（比原脚本精简80%）
+    - name: 安装核心依赖
       run: |
-        # 假设你之前的openwrt源码在 /workdir/openwrt（和你原脚本路径一致）
-        cd /workdir/openwrt
-        
-        # 清理该包缓存（避免上次卡住的残留影响）
+        sudo apt-get -qq update
+        sudo apt-get -qq install git build-essential libncurses5-dev libssl-dev flex bison make
+
+    # 2. 快速下载源码（仅做这一步，跳过所有无关配置）
+    - name: 下载源码（仅需这一步就能生成openwrt目录）
+      run: |
+        cd openwrt 
+        git pull
+        # 生成基础配置（编译单个包必需）
+        cd openwrt
+        ./scripts/feeds update -a && ./scripts/feeds install -a
+        make defconfig
+
+    # 3. 核心：仅编译default-settings并输出日志（你的核心需求）
+    - name: 编译default-settings并记录日志
+      run: |
+        cd openwrt
+        # 清理缓存
         make package/emortal/default-settings/clean
-        
-        # 核心：编译并输出详细日志到文件+控制台
+        # 编译+详细日志
         make package/emortal/default-settings/compile V=s 2>&1 | tee compile-error.log
-        
-        # 打印日志到控制台（实时查看）
+        # 打印日志
         cat compile-error.log
-        
-        # 复制日志到GitHub工作区，方便上传
+        # 复制到工作区
         cp compile-error.log $GITHUB_WORKSPACE/
 
-    # 上传日志文件（方便你下载分析）
-    - name: 上传编译日志
+    # 4. 上传日志
+    - name: 上传日志
       uses: actions/upload-artifact@main
       with:
-        name: default-settings-recompile-log
+        name: default-settings-log
         path: compile-error.log
