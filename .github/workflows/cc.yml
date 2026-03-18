@@ -1,0 +1,36 @@
+name: 测试
+
+on:
+  workflow_dispatch:  # 仅手动触发
+
+jobs:
+  recompile:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    steps:
+    # 关键：直接进入已有的openwrt编译目录（复用之前的环境）
+    - name: 仅编译default-settings并输出详细日志
+      run: |
+        # 假设你之前的openwrt源码在 /workdir/openwrt（和你原脚本路径一致）
+        cd /workdir/openwrt
+        
+        # 清理该包缓存（避免上次卡住的残留影响）
+        make package/emortal/default-settings/clean
+        
+        # 核心：编译并输出详细日志到文件+控制台
+        make package/emortal/default-settings/compile V=s 2>&1 | tee compile-error.log
+        
+        # 打印日志到控制台（实时查看）
+        cat compile-error.log
+        
+        # 复制日志到GitHub工作区，方便上传
+        cp compile-error.log $GITHUB_WORKSPACE/
+
+    # 上传日志文件（方便你下载分析）
+    - name: 上传编译日志
+      uses: actions/upload-artifact@main
+      with:
+        name: default-settings-recompile-log
+        path: compile-error.log
