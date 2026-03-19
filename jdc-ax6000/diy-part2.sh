@@ -17,80 +17,112 @@ rm -rf feeds/packages/net/open-app-filter
 COMPLETE_RC_LOCAL=$(cat << 'EOF'
 #!/bin/sh
 
-# 1. 停止 irqbalance (防止其接管中断，导致手动绑定失效)
+# ==============================
+# MT7986 极致性能优化 rc.local
+# ==============================
+
+# 1. 停止 irqbalance（避免打乱手动绑定）
 if [ -f /etc/init.d/irqbalance ]; then
     /etc/init.d/irqbalance stop
     /etc/init.d/irqbalance disable
 fi
 
-# 等待 MTK 闭源驱动 / IRQ 完全注册
+# 等待驱动初始化
 sleep 10
 
-# 辅助函数：绑定中断到指定 CPU 掩码
+# ==============================
+# IRQ 绑定函数
+# ==============================
 bind_irq() {
     name="$1"
     mask="$2"
-    # 使用 grep 和 awk 查找中断号，避开 xargs 兼容性问题
     for irq in $(grep "$name" /proc/interrupts | awk '{print $1}' | tr -d ':'); do
         if [ -d "/proc/irq/$irq" ]; then
             echo "$mask" > /proc/irq/$irq/smp_affinity
-            logger -t "rc.local" "优化绑定: IRQ $irq ($name) -> CPU掩码 $mask"
+            logger -t "rc.local" "IRQ绑定: $irq ($name) -> mask $mask"
         fi
     done
 }
 
-# --- IRQ 绑定策略 (Filogic 830 / MT7986 4核 A53) ---
-# CPU3 (Mask 8): 专用于 Wi-Fi 和 HNAT 硬件加速
-bind_irq "0000:00:00.0" 8        # PCIe / Wi-Fi
-bind_irq "ccif_wo_isr" 8         # MTK WED/WHNAT 硬件加速
+# ==============================
+# IRQ 分配策略（核心优化）
+# ==============================
 
-# CPU1+2 (Mask 6): 专用于有线网络 (ETH)
+# CPU3：WiFi 专用（最关键）
+bind_irq "0000:00:00.0" 8
+
+# CPU2：WED / HNAT 加速
+bind_irq "ccif_wo_isr" 4
+
+# CPU1+2：有线网络
 bind_irq "15100000.ethernet" 6
 
-# CPU0 (Mask 1): 专用于 I/O 和 加密，不干扰网络
-bind_irq "11230000.mmc" 1        # eMMC 存储
-bind_irq "10320000.crypto" 1     # Crypto 引擎
+# CPU0：存储 & 加密
+bind_irq "11230000.mmc" 1
+bind_irq "10320000.crypto" 1
 
-# --- RPS / XPS 全核优化 ---
-# 让所有 CPU 参与软中断处理，防止单核瓶颈
+# ==============================
+# RPS / XPS 优化（避免全核污染）
+# ==============================
+
+# 提升多连接能力
+echo 32768 > /proc/sys/net/core/rps_sock_flow_entries
+
 for net in /sys/class/net/eth*; do
     [ -d "$net" ] || continue
-    for rps in "$net"/queues/rx-*/rps_cpus; do echo f > "$rps"; done
-    for xps in "$net"/queues/tx-*/xps_cpus; do echo f > "$xps"; done
+
+    for rps in "$net"/queues/rx-*/rps_cpus; do
+        echo 6 > "$rps"     # CPU1+2
+    done
+
+    for xps in "$net"/queues/tx-*/xps_cpus; do
+        echo 6 > "$xps"
+    done
+
+    for flow in "$net"/queues/rx-*/rps_flow_cnt; do
+        echo 4096 > "$flow"
+    done
 done
 
-# --- 进程绑核策略 ---
+# ==============================
+# 进程绑核函数
+# ==============================
 bind_process() {
     pname="$1"
     mask="$2"
-    # 处理可能有多个 PID 的情况
     for pid in $(pidof "$pname"); do
         taskset -p "$mask" "$pid" >/dev/null 2>&1
     done
 }
 
-# [CPU 0] 系统底层服务
+# ==============================
+# 进程绑核策略
+# ==============================
+
+# CPU0：系统基础服务
 bind_process "procd" 1
 bind_process "logd" 1
 bind_process "netifd" 1
 bind_process "ubus" 1
 bind_process "dnsmasq" 1
 
-# [CPU 1,2] 高性能网络服务 (配合 eth 中断)
+# CPU1+2：网络服务
 bind_process "uhttpd" 6
 bind_process "dropbear" 6
 
-# [CPU 2] 代理与广告过滤 (独立核心，不抢占 WiFi/ETH)
-bind_process "sing-box" 4
-bind_process "xray" 4
-bind_process "AdGuardHome" 4
-bind_process "homeproxy" 4
-bind_process "mosdns" 4
+# CPU1+2：代理 / DNS（避免单核瓶颈）
+bind_process "sing-box" 6
+bind_process "xray" 6
+bind_process "AdGuardHome" 6
+bind_process "homeproxy" 6
+bind_process "mosdns" 6
 
-# 延迟写日志，确保 logd 已就绪
+# ==============================
+# 日志
+# ==============================
 (
     sleep 5
-    logger -t rc.local "MT7986 极致性能策略已生效：Wi-Fi(CPU3), Eth(CPU1/2), App分流"
+    logger -t rc.local "MT7986 极致优化已生效：WiFi独占CPU3，ETH/代理分布CPU1-2"
 ) &
 
 exit 0
