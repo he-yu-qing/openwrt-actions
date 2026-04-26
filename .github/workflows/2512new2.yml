@@ -7,7 +7,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 ###############手动修改##############
-name: 2512new内核没有优化的
+name: 2512new内核没有优化的配置优化的
 
 on:
   repository_dispatch:
