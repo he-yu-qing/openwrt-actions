@@ -210,7 +210,7 @@ echo "✔ 防火墙规则已写入"
 
 
 # ==================== 执行 MTK 修复 ====================
-fix_mtk_closed_source_opt
+# fix_mtk_closed_source_opt
 
 
 echo "===> DIY Part2 执行完成"
