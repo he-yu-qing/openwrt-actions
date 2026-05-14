@@ -69,72 +69,92 @@ mkdir -p "$(dirname "$RC_LOCAL")"
 
 cat > "$RC_LOCAL" << 'EOF'
 #!/bin/sh
+# ==========================================
+# MT7986（AX6000）精准优化版（基于真实IRQ）
+# ==========================================
 
-# ==============================
-# MT7986 极致性能优化 rc.local
-# ==============================
+# ===== 1. 关闭 irqbalance =====
+if [ -f /etc/init.d/irqbalance ]; then
+    /etc/init.d/irqbalance stop
+    /etc/init.d/irqbalance disable
+fi
 
-/etc/init.d/irqbalance stop 2>/dev/null
-/etc/init.d/irqbalance disable 2>/dev/null
+sleep 5
 
-sleep 10
-
+# ===== 2. IRQ 绑定函数 =====
 bind_irq() {
     name="$1"
     mask="$2"
     for irq in $(grep "$name" /proc/interrupts | awk '{print $1}' | tr -d ':'); do
-        [ -d "/proc/irq/$irq" ] && echo "$mask" > /proc/irq/$irq/smp_affinity
+        echo "$mask" > /proc/irq/$irq/smp_affinity 2>/dev/null
+        logger -t rc.local "IRQ绑定: $irq ($name) -> mask $mask"
     done
 }
 
+# ==========================================
+# CPU 分工（按你当前最优状态）
+# CPU0：系统 + 存储
+# CPU1：有线网络
+# CPU2：WO（WiFi加速）
 # CPU3：WiFi
-bind_irq "mt76" 8
+# ==========================================
 
-# CPU2：WED/HNAT
-bind_irq "ccif" 4
+# ===== 3. IRQ 精准绑定 =====
 
-# CPU1+2：以太网
-bind_irq "ethernet" 6
+# WiFi（确认设备）
+bind_irq "0000:00:00.0" 8
 
-# CPU0：存储/加密
-bind_irq "mmc" 1
-bind_irq "crypto" 1
+# 有线网络
+bind_irq "15100000.ethernet" 2
 
-echo 32768 > /proc/sys/net/core/rps_sock_flow_entries
+# WiFi Offload（关键）
+bind_irq "ccif_wo_isr" 4
+
+# 存储
+bind_irq "11230000.mmc" 1
+
+# 加密
+bind_irq "10320000.crypto" 1
+
+# ===== 4. RPS/XPS（关闭）=====
+echo 0 > /proc/sys/net/core/rps_sock_flow_entries
 
 for net in /sys/class/net/eth*; do
-    [ -d "$net" ] || continue
-
-    for rps in "$net"/queues/rx-*/rps_cpus; do echo 6 > "$rps"; done
-    for xps in "$net"/queues/tx-*/xps_cpus; do echo 6 > "$xps"; done
-    for flow in "$net"/queues/rx-*/rps_flow_cnt; do echo 4096 > "$flow"; done
+    for f in "$net"/queues/rx-*/rps_cpus; do echo 0 > "$f"; done
+    for f in "$net"/queues/tx-*/xps_cpus; do echo 0 > "$f"; done
 done
 
+# ===== 5. 进程绑核 =====
 bind_process() {
     pname="$1"
     mask="$2"
-    for pid in $(pidof "$pname"); do
+    for pid in $(pidof "$pname" 2>/dev/null); do
         taskset -p "$mask" "$pid" >/dev/null 2>&1
     done
 }
 
-# CPU0：系统
+# 系统 → CPU0
 bind_process "procd" 1
 bind_process "logd" 1
 bind_process "netifd" 1
-bind_process "ubus" 1
-bind_process "dnsmasq" 1
+bind_process "ubusd" 1
 
-# CPU1+2：服务
-bind_process "uhttpd" 6
-bind_process "dropbear" 6
-bind_process "AdGuardHome" 6
-bind_process "homeproxy" 6
-bind_process "mosdns" 6
-bind_process "sing-box" 6
-bind_process "xray" 6
+# 网络服务 → CPU1+2+3
+bind_process "uhttpd" e
+bind_process "dropbear" e
 
-logger -t rc.local "MT7986 优化已生效"
+# DNS / 代理（关键）
+bind_process "dnsmasq" e
+bind_process "AdGuardHome" e
+bind_process "homeproxy" e
+bind_process "sing-box" e
+bind_process "xray" e
+
+# ===== 6. 系统优化 =====
+echo 1000000 > /proc/sys/fs/file-max
+echo 10 > /proc/sys/vm/swappiness
+
+logger -t rc.local "MT7986 精准优化完成（按真实IRQ分布）"
 
 exit 0
 EOF
@@ -147,20 +167,46 @@ echo "✔ rc.local 已写入"
 SYSCTL_CONF="package/base-files/files/etc/sysctl.conf"
 
 cat >> "$SYSCTL_CONF" << 'EOF'
+# ===== 队列 + BBR =====
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
+
+# ===== buffer（匹配1GB内存）=====
 net.core.rmem_max=33554432
 net.core.wmem_max=33554432
-net.core.somaxconn=131072
-net.core.netdev_max_backlog=131072
+net.ipv4.tcp_rmem=4096 131072 33554432
+net.ipv4.tcp_wmem=4096 131072 33554432
 
-net.ipv4.tcp_congestion_control=bbr
+# ===== backlog（防止拥塞）=====
+net.core.netdev_max_backlog=32768
+net.core.somaxconn=65535
+
+# ===== TCP 行为 =====
 net.ipv4.tcp_fastopen=3
 net.ipv4.tcp_fin_timeout=30
+net.ipv4.tcp_tw_reuse=1
 net.ipv4.tcp_max_syn_backlog=65535
+net.ipv4.tcp_slow_start_after_idle=0
 
+# ===== 内存控制 =====
+net.ipv4.tcp_mem=262144 524288 1048576
+
+# ===== conntrack =====
 net.netfilter.nf_conntrack_max=131072
 
+# ===== 安全 =====
+net.ipv4.icmp_echo_ignore_broadcasts=1
+net.ipv4.icmp_ignore_bogus_error_responses=1
+net.ipv4.conf.all.accept_source_route=0
+net.ipv4.conf.default.accept_source_route=0
+net.ipv4.conf.all.rp_filter=1
+net.ipv4.conf.default.rp_filter=1
+
+# ===== VM =====
 vm.swappiness=10
 vm.vfs_cache_pressure=50
+vm.dirty_ratio=15
+vm.dirty_background_ratio=5
 EOF
 
 echo "✔ sysctl 优化已写入"
