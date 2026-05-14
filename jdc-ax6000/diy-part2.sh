@@ -8,7 +8,8 @@ set -e
 echo "===> DIY Part2 开始执行"
 
 ##----------------- 删除重复包 ------------------
-rm -rf feeds/packages/net/open-app-filter  &&  rm -rf feeds/packages/net/open-app-filter  &&  rm -rf feeds/packages/net/adguardhome  &&  rm -rf feeds/luci/applications/luci-app-adguardhome  &&  rm -rf feeds/packages/net/*adguardhome*  &&  rm -rf feeds/luci/applications/*luci-app-adguardhome*
+rm -rf feeds/packages/net/open-app-filter 
+# rm -rf feeds/packages/net/adguardhome  &&  rm -rf feeds/luci/applications/luci-app-adguardhome  &&  rm -rf feeds/packages/net/*adguardhome*  &&  rm -rf feeds/luci/applications/*luci-app-adguardhome*
 
 
 # ==================== MTK 闭源驱动优化隔离 ====================
@@ -210,7 +211,7 @@ echo "✔ 防火墙规则已写入"
 
 
 # ==================== 执行 MTK 修复 ====================
-fix_mtk_closed_source_opt
+# fix_mtk_closed_source_opt
 
 
 echo "===> DIY Part2 执行完成"
