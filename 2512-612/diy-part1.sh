@@ -18,4 +18,4 @@
 # echo 'src-git passwall https://github.com/xiaorouji/openwrt-passwall' >>feeds.conf.default
 # git clone https://github.com/messense/aliyundrive-webdav package/messense
 # git clone https://github.com/gdy666/luci-app-lucky package/lucky
-git clone https://github.com/destan19/OpenAppFilter.git package/OpenAppFilter    
+git clone https://github.com/destan19/OpenAppFilter.git package/OpenAppFilter
