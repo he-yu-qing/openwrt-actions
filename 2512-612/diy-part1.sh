@@ -20,3 +20,4 @@
 # git clone https://github.com/gdy666/luci-app-lucky package/lucky
 git clone https://github.com/destan19/OpenAppFilter.git package/OpenAppFilter
 git clone https://github.com/sirpdboy/luci-app-adguardhome package/AdguardHome
+#git clone https://github.com/linkease/istore  package/istore
